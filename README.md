@@ -1,1 +1,0 @@
-# pinnawala-gems-system
