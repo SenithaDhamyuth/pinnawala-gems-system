@@ -1,16 +1,16 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+import tensorflow as tf
+import numpy as np
+from PIL import Image
+import io
+import ast
 
-# 1. App එක පටන් ගන්නවා
+
 app = FastAPI()
 
-# 2. Frontend එකට (React) අවසර දීම (CORS Setup)
-# මේක නැත්නම් React එකෙන් Backend එකට කතා කරන්න බෑ.
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",  # Vite React Port
-]
 
+origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -19,29 +19,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. මූලික API Endpoints (Tests)
+
+print("🔄 Loading AI Model...")
+MODEL_PATH = "ai_engine/gem_model.h5"
+LABELS_PATH = "ai_engine/labels.txt"
+
+model = tf.keras.models.load_model(MODEL_PATH)
+
+with open(LABELS_PATH, "r") as f:
+    class_names = ast.literal_eval(f.read())
+
+print("✅ Model Loaded Successfully!")
+
+
 
 @app.get("/")
-def home():
-    return {
-        "message": "Welcome to Pinnawala Gems API! 💎",
-        "status": "Server is Running Smoothly",
-        "version": "1.0.0"
-    }
+def read_root():
+    return {"message": "Gem Prediction API is Running! 💎"}
 
-@app.get("/api/check")
-def check_system():
-    return {
-        "database": "Not Connected (Yet)",
-        "ai_engine": "Ready to Load",
-        "user": "Admin"
-    }
+@app.post("/predict")
+async def predict_gem(file: UploadFile = File(...)):
+    
+    image_data = await file.read()
+    image = Image.open(io.BytesIO(image_data)).convert("RGB")
+    
+    
+    image = image.resize((224, 224))
+    img_array = tf.keras.preprocessing.image.img_to_array(image)
+    img_array = tf.expand_dims(img_array, 0) 
+    img_array = img_array / 255.0 
 
-# 4. Gem Price Test (නිකන් ගාණක් පෙන්නන්න)
-@app.get("/api/predict-price-test")
-def predict_test():
+   
+    predictions = model.predict(img_array)
+    predicted_class = class_names[np.argmax(predictions[0])]
+    confidence = float(np.max(predictions[0])) * 100
+
     return {
-        "gem_type": "Blue Sapphire",
-        "weight": "1.0 Ct",
-        "estimated_price_lkr": 350000.00
+        "gem_type": predicted_class,
+        "confidence": round(confidence, 2)
     }
