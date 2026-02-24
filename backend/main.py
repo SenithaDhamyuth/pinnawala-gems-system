@@ -1,60 +1,93 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import tensorflow as tf
 import numpy as np
 from PIL import Image
 import io
-import ast
+import os
 
-
+# 1. FastAPI App එක මුලින්ම Initialize කරනවා (NameError එක එන්නේ නැති වෙන්න)
 app = FastAPI()
 
-
-origins = ["*"]
+# 2. React Frontend එකට Backend එකත් එක්ක කතා කරන්න අවසර දීම (CORS) [cite: 78, 146]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# 3. අපේ AI Model එක සහ Labels තියෙන තැන් (Paths) 
+MODEL_PATH = '../ai_engine/gem_model.h5'
+LABEL_PATH = '../ai_engine/labels.txt'
 
-print("🔄 Loading AI Model...")
-MODEL_PATH = "ai_engine/gem_model.h5"
-LABELS_PATH = "ai_engine/labels.txt"
+model = None
+class_names = []
 
-model = tf.keras.models.load_model(MODEL_PATH)
+# 4. Server එක startup වෙද්දීම Model එක Load කරගැනීම 
+@app.on_event("startup")
+async def load_model():
+    global model, class_names
+    try:
+        if os.path.exists(MODEL_PATH):
+            model = tf.keras.models.load_model(MODEL_PATH)
+            print("✅ AI Model Loaded Successfully!")
+        else:
+            print(f"❌ Error: Model not found at {MODEL_PATH}")
 
-with open(LABELS_PATH, "r") as f:
-    class_names = ast.literal_eval(f.read())
+        if os.path.exists(LABEL_PATH):
+            with open(LABEL_PATH, 'r') as f:
+                class_names = [line.strip() for line in f.readlines()]
+            print(f"✅ Labels Loaded: {class_names}")
+        else:
+            print("❌ Error: Labels not found!")
+    except Exception as e:
+        print(f"❌ Failed to load model: {e}")
 
-print("✅ Model Loaded Successfully!")
+# 5. Image Pre-processing (MobileNetV2 වලට ගැලපෙන සයිස් එකට සකස් කිරීම) 
+def preprocess_image(image_bytes):
+    img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+    img = img.resize((224, 224)) 
+    img_array = np.array(img) / 255.0 
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
 
-
-
-@app.get("/")
-def read_root():
-    return {"message": "Gem Prediction API is Running! 💎"}
-
-@app.post("/predict")
+# 6. Prediction Endpoint (90% Confidence Threshold එක සමඟ) [cite: 63, 215]
+@app.post("/api/predict-gem")
 async def predict_gem(file: UploadFile = File(...)):
-    
-    image_data = await file.read()
-    image = Image.open(io.BytesIO(image_data)).convert("RGB")
-    
-    
-    image = image.resize((224, 224))
-    img_array = tf.keras.preprocessing.image.img_to_array(image)
-    img_array = tf.expand_dims(img_array, 0) 
-    img_array = img_array / 255.0 
+    if model is None:
+        return {"error": "AI Model is not loaded on the server."}
 
-   
-    predictions = model.predict(img_array)
-    predicted_class = class_names[np.argmax(predictions[0])]
-    confidence = float(np.max(predictions[0])) * 100
+    try:
+        contents = await file.read()
+        processed_image = preprocess_image(contents)
 
-    return {
-        "gem_type": predicted_class,
-        "confidence": round(confidence, 2)
-    }
+        # AI Prediction ලබා ගැනීම
+        predictions = model.predict(processed_image)
+        predicted_class_idx = np.argmax(predictions[0])
+        confidence = float(predictions[0][predicted_class_idx]) * 100
+
+        # Confidence එක 90% ට වඩා අඩු නම් "Unrecognized" විදියට සලකනවා [cite: 215]
+        if confidence < 90.0:
+            return {
+                "gem_type": "Unrecognized Gem",
+                "confidence": round(confidence, 1),
+                "description": "AI Confidence score is too low. Please get a better, clearer picture of the gemstone and try again."
+            }
+
+        # 90% හෝ ඊට වැඩි නම් පමණක් අදාළ නම ලබා දීම
+        gem_type = class_names[predicted_class_idx] if class_names else "Unknown"
+
+        if gem_type == "Not_a_Gem":
+            desc = "This does not appear to be a recognized gemstone. Please upload a clear image of a gem."
+        else:
+            desc = f"Identified as {gem_type.replace('_', ' ')}. Recommended for further physical inspection to verify market value."
+
+        return {
+            "gem_type": gem_type.replace('_', ' '),
+            "confidence": round(confidence, 1),
+            "description": desc
+        }
+    except Exception as e:
+        return {"error": str(e)}

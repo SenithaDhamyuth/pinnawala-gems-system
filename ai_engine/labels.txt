@@ -1,1 +1,10 @@
-['Blue_Sapphire', 'Green_sapphire', 'Orange_sapphire', 'Pink_Sapphire', 'Purple_sapphire', 'Ruby', 'White_sapphire', 'Yellow_sapphire', 'Zircon']
+Blue_Sapphire
+Green_sapphire
+Not_a_Gem
+Orange_sapphire
+Pink_Sapphire
+Purple_sapphire
+Ruby
+White_sapphire
+Yellow_sapphire
+Zircon
