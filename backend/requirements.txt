@@ -1,0 +1,9 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+motor==3.7.0
+python-dotenv==1.0.1
+email-validator==2.2.0
+python-multipart==0.0.20
+# Optional AI endpoint helpers can be installed separately if needed:
+# pillow
+# numpy

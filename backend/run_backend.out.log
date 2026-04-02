@@ -1,0 +1,6 @@
+AI dependencies are not installed. Inventory APIs remain available.
+INFO:     127.0.0.1:58529 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58540 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58541 - "GET /api/inventory/my-items HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58542 - "POST /api/inventory HTTP/1.1" 201 Created
+INFO:     127.0.0.1:58543 - "DELETE /api/inventory/69c8e29bfa4b018cb024f25f HTTP/1.1" 200 OK

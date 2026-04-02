@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
+
 // --- 💎 THE EXPANDED GEMS DATABASE ---
 const gemDatabase = {
   "Blue Sapphire": {
@@ -243,7 +245,7 @@ const AIEngine = () => {
     formData.append("file", selectedImage);
 
     try {
-      const response = await fetch("http://localhost:8000/api/predict-gem", {
+      const response = await fetch(`${API_BASE_URL}/predict-gem`, {
         method: "POST",
         body: formData,
       });
