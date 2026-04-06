@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { registerUser, uploadKYC } from "../services/api"
+import { registerUser, loginUser, uploadKYC, verifyNIC } from "../services/api"
 
 const style = document.createElement("style")
 style.textContent = `
@@ -57,6 +57,36 @@ style.textContent = `
     font-weight: 500;
     margin-bottom: 34px;
     padding-left: 64px;
+  }
+
+  .sr-tab-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+
+  .sr-tab {
+    flex: 1;
+    padding: 12px 0;
+    border-radius: 14px;
+    border: 1.5px solid #dde4f8;
+    background: #ffffff;
+    color: #8898cc;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .sr-tab.active {
+    border-color: #3b6aff;
+    background: #edf2ff;
+    color: #3b6aff;
+    box-shadow: 0 2px 12px rgba(59,106,255,0.15);
+  }
+
+  .sr-tab:hover {
+    color: #3b6aff;
+    border-color: #3b6aff;
   }
 
   /* ── Progress Bar ── */
@@ -266,6 +296,35 @@ style.textContent = `
     margin-top: 8px;
   }
 
+  .sr-upload-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-top: 8px;
+  }
+
+  .sr-upload-badge.success {
+    background: #ecfdf5;
+    border: 1px solid #34d399;
+    color: #065f46;
+  }
+
+  .sr-upload-badge.error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+  }
+
+  .sr-upload-badge.pending {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+  }
+
   /* Gem chips */
   .sr-gems-wrap {
     display: flex;
@@ -414,6 +473,17 @@ style.textContent = `
     font-weight: 600;
     margin-bottom: 14px;
   }
+  .sr-success-msg {
+    text-align: center;
+    background: #edfaf3;
+    border: 1px solid #b6e8d0;
+    color: #1a8a4a;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
 
   @media (max-width: 500px) {
     .sr-card { padding: 28px 20px; }
@@ -429,9 +499,16 @@ const GEM_OPTIONS = ["Blue Sapphire", "Ruby", "Emerald", "Cat's Eye", "Alexandri
 
 export default function SellerRegister() {
   const navigate = useNavigate()
+  const [mode, setMode] = useState("signin")
   const [step, setStep] = useState(1)
   const [message, setMessage] = useState("")
+  const [messageType, setMessageType] = useState("error")
   const [loading, setLoading] = useState(false)
+  const [verificationMessage, setVerificationMessage] = useState("")
+  const [isGovernmentVerified, setIsGovernmentVerified] = useState(false)
+  const [nicVerified, setNicVerified] = useState(false)
+  const [nicVerificationResult, setNicVerificationResult] = useState(null)
+  const [loginData, setLoginData] = useState({ email: "", password: "" })
 
   const [personal, setPersonal] = useState({
     full_name: "", email: "", phone: "", password: "", nic_number: "", district: "",
@@ -440,7 +517,11 @@ export default function SellerRegister() {
   const [nicBack, setNicBack] = useState(null)
   const [ngjaLicense, setNgjaLicense] = useState(null)
   const [business, setBusiness] = useState({
-    shop_name: "", years_in_business: "", business_description: "", gem_types: [],
+    shop_name: "",
+    years_in_business: "",
+    business_description: "",
+    gem_types: [],
+    ngja_number: "",
   })
 
   const toggleGem = (gem) => {
@@ -452,45 +533,174 @@ export default function SellerRegister() {
     }))
   }
 
-  const handleSubmit = async () => {
-    setLoading(true); setMessage("")
+  const handleSellerLogin = async () => {
+    setMessage("")
+    setMessageType("error")
+    if (!loginData.email.includes("@") || !loginData.email.includes(".")) {
+      setMessage("Please enter a valid email address.")
+      return
+    }
+    if (!loginData.password) {
+      setMessage("Please enter your password.")
+      return
+    }
+    setLoading(true)
     try {
-      await registerUser({
-        full_name: personal.full_name, email: personal.email,
-        password: personal.password, phone: personal.phone, role: "seller",
-      })
+      const res = await loginUser(loginData)
+      localStorage.clear()
+      localStorage.setItem("token", res.data.token)
+      localStorage.setItem("role", res.data.role)
+      localStorage.setItem("name", res.data.name)
+      setMessageType("success")
+      setMessage("Login successful! You are signed in.")
+    } catch (err) {
+      setMessage(err.response?.data?.detail || "Login failed. Please try again.")
+    }
+    setLoading(false)
+  }
+
+  const handleVerifyNIC = async () => {
+    setMessage("")
+    setMessageType("error")
+    if (!nicFront) {
+      setMessage("Please upload the NIC front image or PDF before verifying.")
+      return
+    }
+    if (!personal.email) {
+      setMessage("Please enter your email address first so the verification can be linked to your account.")
+      return
+    }
+
+    setLoading(true)
+    try {
+      const form = new FormData()
+      form.append("seller_email", personal.email)
+      form.append("file", nicFront)
+      const response = await verifyNIC(form)
+      const success = response.data?.valid === true
+      setNicVerified(success)
+      setNicVerificationResult(response.data)
+      setMessageType(success ? "success" : "error")
+      setMessage(success
+        ? "NIC verification successful. You may continue to the next step."
+        : response.data?.message || "NIC verification failed. Please upload a clearer NIC front or use a different file."
+      )
+    } catch (err) {
+      setMessage(err?.response?.data?.detail || err?.response?.data?.message || "NIC verification failed. Please try again.")
+    }
+    setLoading(false)
+  }
+
+  const handleSubmit = async () => {
+    setMessage("")
+
+    if (!personal.email || !personal.full_name || !personal.phone || !personal.password) {
+      setMessage("Please complete all personal details before submitting.")
+      return
+    }
+    if (!nicVerified) {
+      setMessage("Please verify your NIC before submitting your seller application.")
+      return
+    }
+    if (!nicFront || !ngjaLicense) {
+      setMessage("Please upload NIC front and NGJA license before submitting.")
+      return
+    }
+    if (!business.shop_name) {
+      setMessage("Please enter your shop name before submitting.")
+      return
+    }
+    setLoading(true)
+    try {
+      // If account already exists, continue with KYC upload instead of blocking submit.
+      try {
+        await registerUser({
+          full_name: personal.full_name, email: personal.email,
+          password: personal.password, phone: personal.phone, role: "seller",
+        })
+      } catch (registerErr) {
+        const registerMsg = registerErr?.response?.data?.detail
+        if (registerMsg !== "Email already registered!") {
+          throw registerErr
+        }
+      }
       const form = new FormData()
       form.append("email", personal.email)
       form.append("nic_number", personal.nic_number)
       form.append("shop_name", business.shop_name)
+      form.append("ngja_license_number", business.ngja_number || "")
       form.append("nic_front", nicFront)
       form.append("ngja_license", ngjaLicense)
-      await uploadKYC(form)
+      const uploadResponse = await uploadKYC(form)
+      
+      const isVerified = uploadResponse.data?.is_verified_seller === true
+      const messageText = uploadResponse.data?.kyc_message || uploadResponse.data?.message || ""
+      setVerificationMessage(messageText)
+      setIsGovernmentVerified(isVerified)
+
+      if (isVerified) {
+        window.alert("You're verified Seller")
+      } else {
+        window.alert("You're not verified seller. Please register with the government to become a verified seller.")
+      }
+      
       setStep(5)
     } catch (err) {
-      setMessage(err.response?.data?.detail || "Submission failed. Please try again.")
+      const detail = err?.response?.data?.detail
+      if (Array.isArray(detail) && detail.length > 0) {
+        setMessage(detail[0]?.msg || "Submission failed. Please try again.")
+      } else {
+        setMessage(detail || err?.response?.data?.message || err?.message || "Submission failed. Please try again.")
+      }
     }
     setLoading(false)
   }
 
   /* ── Success Screen ── */
-  if (step === 5) return (
-    <div className="sr-success">
-      <div className="sr-success-card">
-        <div className="sr-success-icon">✅</div>
-        <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: "1.8rem", color: "#0f1c4d", marginBottom: "10px" }}>
-          Application Submitted!
+  if (step === 5) {
+    const isVerified = isGovernmentVerified
+    
+    return (
+      <div className="sr-success">
+        <div className="sr-success-card">
+          <div className="sr-success-icon" style={{
+            background: isVerified 
+              ? "linear-gradient(135deg, #10b981, #059669)" 
+              : "linear-gradient(135deg, #f59e0b, #d97706)"
+          }}>
+            {isVerified ? "✅" : "📋"}
+          </div>
+          <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: "1.8rem", color: "#0f1c4d", marginBottom: "10px" }}>
+            {isVerified ? "Verified Seller! 🎉" : "Application Submitted!"}
+          </div>
+          <div style={{ fontSize: "0.9rem", color: "#8898cc", fontWeight: "500", marginBottom: "32px", lineHeight: 1.6 }}>
+            {isVerified ? (
+              <>
+                <div style={{ marginBottom: "12px" }}>
+                  <strong style={{ color: "#10b981" }}>Your documents have been verified successfully!</strong>
+                </div>
+                <div>
+                  Your seller account is now active. You can start listing gemstones immediately.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom: "12px" }}>
+                  You are not verified by government records.
+                </div>
+                <div>
+                  {verificationMessage || "Please register with the government to become a verified seller."}
+                </div>
+              </>
+            )}
+          </div>
+          <button className="sr-btn-next" style={{ margin: "0 auto" }} onClick={() => navigate("/")}>
+            {isVerified ? "Start Selling →" : "Back to Sign In →"}
+          </button>
         </div>
-        <div style={{ fontSize: "0.9rem", color: "#8898cc", fontWeight: "500", marginBottom: "32px", lineHeight: 1.6 }}>
-          Thank you for registering as a seller on Pinnawala Gems.<br/>
-          Our admin team will review your KYC documents within <strong style={{ color: "#3b6aff" }}>48 hours</strong>.
-        </div>
-        <button className="sr-btn-next" style={{ margin: "0 auto" }} onClick={() => navigate("/")}>
-          Back to Sign In →
-        </button>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="sr-root">
@@ -535,33 +745,71 @@ export default function SellerRegister() {
         </div>
         <div className="sr-subtitle">Complete all 4 steps to become a verified gem seller on Pinnawala</div>
 
-        {/* PROGRESS */}
-        <div className="sr-progress">
-          {STEPS.map((label, i) => {
-            const s = i + 1
-            const isDone    = step > s
-            const isActive  = step === s
-            const isPending = step < s
-            return (
-              <div className="sr-step-wrap" key={i}>
-                <div className={`sr-step-circle ${isDone ? "done" : isActive ? "active" : "pending"}`}>
-                  {isDone ? "✓" : s}
-                </div>
-                <span className={`sr-step-label ${isDone ? "done-lbl" : isActive ? "active-lbl" : "pending-lbl"}`}>
-                  {label}
-                </span>
-                {i < STEPS.length - 1 && (
-                  <div className="sr-step-line">
-                    <div className="sr-step-line-fill" style={{ width: isDone ? "100%" : "0%" }} />
-                  </div>
-                )}
-              </div>
-            )
-          })}
+        <div className="sr-tab-bar">
+          <button className={`sr-tab ${mode === "signin" ? "active" : "inactive"}`} onClick={() => { setMode("signin"); setMessage(""); }}>
+            SIGN IN
+          </button>
+          <button className={`sr-tab ${mode === "signup" ? "active" : "inactive"}`} onClick={() => { setMode("signup"); setMessage(""); }}>
+            SIGN UP
+          </button>
         </div>
 
-        {/* CARD */}
-        <div className="sr-card">
+        {mode === "signin" ? (
+          <div className="sr-card">
+            <div className="sr-step-title">Seller Sign In</div>
+            <div className="sr-step-desc">Sign in with your seller account email and password.</div>
+
+            <label className="sr-label">✉️ Email Address</label>
+            <input className="sr-input" type="email" placeholder="seller@email.com"
+              autoComplete="off" value={loginData.email}
+              onChange={(e) => setLoginData({ ...loginData, email: e.target.value })} />
+
+            <label className="sr-label">🔒 Password</label>
+            <input className="sr-input" type="password" placeholder="Enter password"
+              autoComplete="new-password" value={loginData.password}
+              onChange={(e) => setLoginData({ ...loginData, password: e.target.value })} />
+
+            {message && (
+              <div className={`sr-error-msg ${messageType === "success" ? "sr-success-msg" : ""}`}>
+                {message}
+              </div>
+            )}
+
+            <div className="sr-btn-row">
+              <button className="sr-btn-next" onClick={handleSellerLogin} disabled={loading}>
+                {loading ? "⏳ Signing in…" : "Sign In"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* PROGRESS */}
+            <div className="sr-progress">
+              {STEPS.map((label, i) => {
+                const s = i + 1
+                const isDone    = step > s
+                const isActive  = step === s
+                const isPending = step < s
+                return (
+                  <div className="sr-step-wrap" key={i}>
+                    <div className={`sr-step-circle ${isDone ? "done" : isActive ? "active" : "pending"}`}>
+                      {isDone ? "✓" : s}
+                    </div>
+                    <span className={`sr-step-label ${isDone ? "done-lbl" : isActive ? "active-lbl" : "pending-lbl"}`}>
+                      {label}
+                    </span>
+                    {i < STEPS.length - 1 && (
+                      <div className="sr-step-line">
+                        <div className="sr-step-line-fill" style={{ width: isDone ? "100%" : "0%" }} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* CARD */}
+            <div className="sr-card">
 
           {/* STEP 1 — Personal */}
           {step === 1 && (
@@ -586,7 +834,11 @@ export default function SellerRegister() {
                   <label className="sr-label">✉️ Email Address</label>
                   <input className="sr-input" type="email" placeholder="seller@email.com"
                     autoComplete="off" value={personal.email}
-                    onChange={(e) => setPersonal({ ...personal, email: e.target.value })} />
+                    onChange={(e) => {
+                      setPersonal({ ...personal, email: e.target.value })
+                      setNicVerified(false)
+                      setNicVerificationResult(null)
+                    }} />
                 </div>
                 <div>
                   <label className="sr-label">📱 Phone Number</label>
@@ -634,10 +886,19 @@ export default function SellerRegister() {
                 <div className="sr-upload-title">Upload NIC Front</div>
                 <div className="sr-upload-sub">Click to browse or drag & drop your file here</div>
                 <input type="file" accept=".jpg,.png,.pdf"
-                  onChange={(e) => setNicFront(e.target.files[0])}
+                  onChange={(e) => {
+                    setNicFront(e.target.files[0])
+                    setNicVerified(false)
+                    setNicVerificationResult(null)
+                  }}
                   style={{ fontSize: "0.82rem", color: "#3b6aff" }} />
                 {nicFront && (
-                  <div className="sr-upload-ok">✅ {nicFront.name}</div>
+                  <>
+                    <div className="sr-upload-ok">✅ {nicFront.name}</div>
+                    <div className={`sr-upload-badge ${nicVerificationResult ? (nicVerified ? "success" : "error") : "pending"}`}>
+                      {nicVerificationResult ? (nicVerified ? "✅ Verified" : "❌ Not verified") : "⏳ Pending verification"}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -667,9 +928,51 @@ export default function SellerRegister() {
                 )}
               </div>
 
+              <label className="sr-label">🔢 NGJA License Number</label>
+                <div style={{ marginBottom: "16px" }}>
+                    <input
+                        className="sr-input"
+                        placeholder="e.g. NGJA-2024-001"
+                        autoComplete="off"
+                        value={business.ngja_number}
+                        onChange={(e) => setBusiness({
+                            ...business,
+                            ngja_number: e.target.value
+                        })}
+                    />
+                </div>
+
+              <div style={{ marginTop: "16px" }}>
+                <button className="sr-btn-next" onClick={handleVerifyNIC} disabled={loading}>
+                  {loading ? "⏳ Verifying NIC…" : nicVerificationResult ? (nicVerified ? "✅ Verified NIC" : "❌ NIC Not Verified") : "Verify NIC Front"}
+                </button>
+                {nicVerificationResult && (
+                  <div style={{ marginTop: "12px", color: nicVerified ? "#047857" : "#b91c1c", fontWeight: 600 }}>
+                    {nicVerified ? "✅ NIC verified successfully." : "❌ NIC verification failed."}
+                    {nicVerificationResult.nic ? (
+                      <div style={{ fontSize: "0.84rem", marginTop: "6px", color: "#475569" }}>
+                        Recognized NIC: {nicVerificationResult.nic}
+                      </div>
+                    ) : null}
+                    {nicVerificationResult.extracted_text ? (
+                      <div style={{ fontSize: "0.7rem", marginTop: "6px", color: "#6b7280", fontStyle: "italic" }}>
+                        Extracted text: "{nicVerificationResult.extracted_text.substring(0, 100)}..."
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
               <div className="sr-btn-row">
                 <button className="sr-btn-back" onClick={() => setStep(1)}>← Back</button>
-                <button className="sr-btn-next" onClick={() => setStep(3)}>
+                <button className="sr-btn-next" onClick={() => {
+                  setMessage("")
+                  if (!nicVerified) {
+                    setMessage("Please verify your NIC front before moving to business details.")
+                    return
+                  }
+                  setStep(3)
+                }}>
                   Next: Business Info →
                 </button>
               </div>
@@ -740,7 +1043,7 @@ export default function SellerRegister() {
                   ["📍 District",     personal.district],
                   ["🏪 Shop Name",    business.shop_name],
                   ["📅 Experience",   business.years_in_business],
-                  ["🪪 NIC Front",    nicFront   ? "✅ " + nicFront.name   : "❌ Not uploaded"],
+                  ["🪪 NIC Front",    nicFront   ? "✅ " + nicFront.name + (nicVerified ? " (Verified)" : " (Not verified)") : "❌ Not uploaded"],
                   ["🪪 NIC Back",     nicBack    ? "✅ " + nicBack.name    : "❌ Not uploaded"],
                   ["📋 NGJA License", ngjaLicense ? "✅ " + ngjaLicense.name : "❌ Not uploaded"],
                   ["💎 Gem Types",    business.gem_types.join(", ") || "None selected"],
@@ -764,6 +1067,8 @@ export default function SellerRegister() {
           )}
 
         </div>
+          </>
+        )}
       </div>
     </div>
   )

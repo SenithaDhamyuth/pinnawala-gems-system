@@ -349,6 +349,13 @@ export default function AdminDashboard() {
     return <span className={`ad-badge ${b.cls}`}>{b.icon} {b.label}</span>
   }
 
+  const govBadge = (isVerified) => {
+    if (isVerified) {
+      return <span className="ad-badge bdg-approved">✅ Verified</span>
+    }
+    return <span className="ad-badge bdg-rejected">❌ Not Verified</span>
+  }
+
   /* ══════════════ LOGIN PAGE ══════════════ */
   if (!loggedIn) return (
     <div className="ad-root">
@@ -477,7 +484,7 @@ export default function AdminDashboard() {
               : <table className="ad-table">
                   <thead>
                     <tr>
-                      {["Name", "Email", "Shop", "NIC", "Actions"].map(h => (
+                      {["Name", "Email", "Shop", "NIC", "Verified", "Actions"].map(h => (
                         <th key={h} className="ad-th">{h}</th>
                       ))}
                     </tr>
@@ -489,15 +496,22 @@ export default function AdminDashboard() {
                         <td className="ad-td">{seller.email}</td>
                         <td className="ad-td">{seller.shop_name || "—"}</td>
                         <td className="ad-td">{seller.nic_number || "—"}</td>
+                        <td className="ad-td">{govBadge(seller.is_verified_seller)}</td>
                         <td className="ad-td">
-                          <button className="ad-btn-approve"
-                            onClick={() => handleKYC(seller.email, "approve")}>
-                            ✅ Approve
-                          </button>
-                          <button className="ad-btn-reject"
-                            onClick={() => handleKYC(seller.email, "reject")}>
-                            ❌ Reject
-                          </button>
+                          {seller.is_verified_seller ? (
+                            <>
+                              <button className="ad-btn-approve"
+                                onClick={() => handleKYC(seller.email, "approve")}>
+                                ✅ Approve
+                              </button>
+                              <button className="ad-btn-reject"
+                                onClick={() => handleKYC(seller.email, "reject")}>
+                                ❌ Reject
+                              </button>
+                            </>
+                          ) : (
+                            <span className="ad-badge bdg-rejected">Seller not verified</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -515,7 +529,7 @@ export default function AdminDashboard() {
               : <table className="ad-table">
                   <thead>
                     <tr>
-                      {["Name", "Email", "Role", "KYC Status", "Banned", "Actions"].map(h => (
+                      {["Name", "Email", "Role", "Verified", "KYC Status", "Banned", "Actions"].map(h => (
                         <th key={h} className="ad-th">{h}</th>
                       ))}
                     </tr>
@@ -530,6 +544,7 @@ export default function AdminDashboard() {
                             {user.role === "seller" ? "💎" : "👤"} {user.role}
                           </span>
                         </td>
+                        <td className="ad-td">{govBadge(user.is_verified_seller)}</td>
                         <td className="ad-td">{kycBadge(user.kyc_status)}</td>
                         <td className="ad-td">
                           {user.is_banned

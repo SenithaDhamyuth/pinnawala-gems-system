@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.auth import router as auth_router
+from routes.verify_nic import router as verify_nic_router
 
 app = FastAPI(title="Pinnawala Gems API")
 
@@ -13,6 +14,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+app.include_router(verify_nic_router)
 
 @app.get("/")
 def home():

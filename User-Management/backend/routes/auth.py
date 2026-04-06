@@ -1,8 +1,10 @@
+from core.auto_verify import verify_government_license
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from passlib.context import CryptContext
-from core.database import users_collection
+from core.database import db, users_collection
 from core.jwt_handler import create_token
 from models.user import UserRegister, UserLogin
+from datetime import datetime
 import shutil, os
 
 router = APIRouter()
@@ -19,6 +21,7 @@ def register(user: UserRegister):
         "phone":      user.phone,
         "role":       user.role,
         "kyc_status": "not_required" if user.role == "buyer" else "pending",
+        "is_verified_seller": False,
         "is_active":  True,
         "is_banned":  False,
     }
@@ -46,6 +49,7 @@ async def upload_kyc(
     shop_name:    str        = Form(...),
     nic_front:    UploadFile = File(...),
     ngja_license: UploadFile = File(...),
+    ngja_license_number: str = Form(""),
 ):
     folder = f"kyc_uploads/{email.replace('@','_')}"
     os.makedirs(folder, exist_ok=True)
@@ -61,7 +65,66 @@ async def upload_kyc(
             "kyc_status":  "under_review",
         }}
     )
-    return {"message": "KYC submitted! Admin will review in 48 hours."}
+
+    verification_result = None
+    if ngja_license_number:
+        try:
+            verification_result = verify_government_license(ngja_license_number)
+            users_collection.update_one(
+                {"email": email},
+                {
+                    "$set": {
+                        "is_verified_seller": verification_result["is_verified"],
+                        "government_verification_message": verification_result["message"],
+                        "government_verified_at": verification_result["verified_at"] if verification_result.get("is_verified") else None,
+                        "kyc_status": "under_review",
+                    }
+                }
+            )
+
+            db_update = {
+                "$set": {
+                    "kyc_status": "under_review",
+                    "reviewed_at": datetime.utcnow(),
+                    "review_note": verification_result["message"],
+                    "government_verified": verification_result["is_verified"],
+                }
+            }
+            # Keep kyc_documents data consistent for all sellers
+            db["kyc_documents"].update_one(
+                {"email": email},
+                db_update,
+                upsert=True
+            )
+
+            response = {
+                "message": verification_result["message"],
+                "kyc_status": "under_review",
+                "kyc_message": verification_result["message"],
+                "verification_type": "government_check",
+                "is_verified_seller": verification_result["is_verified"],
+            }
+            if not verification_result["is_verified"]:
+                response["advice"] = "Please register with the government to become a verified seller."
+            return response
+
+        except Exception as e:
+            print(f"Government verification error: {str(e)}")
+            return {
+                "message": "KYC submitted. Admin will review soon.",
+                "kyc_status": "under_review",
+                "kyc_message": "Submitted successfully, waiting for admin review.",
+                "verification_type": "manual_review",
+                "is_verified_seller": False
+            }
+
+    return {
+        "message": "KYC submitted! Admin will review in 48 hours.",
+        "kyc_status": "under_review",
+        "kyc_message": "Submitted successfully, waiting for manual/admin review.",
+        "verification_type": "manual_review",
+        "is_verified_seller": False
+    }
 
 @router.get("/admin/pending-kyc")
 def get_pending_kyc():
@@ -75,6 +138,17 @@ def get_pending_kyc():
 def update_kyc_status(email: str, action: str):
     if action not in ["approve", "reject"]:
         raise HTTPException(status_code=400, detail="Action must be approve or reject")
+
+    user = users_collection.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if action == "approve" and not user.get("is_verified_seller"):
+        raise HTTPException(
+            status_code=403,
+            detail="Seller is not verified by government records and cannot be approved."
+        )
+
     new_status = "approved" if action == "approve" else "rejected"
     users_collection.update_one({"email": email}, {"$set": {"kyc_status": new_status}})
     return {"message": f"KYC {new_status} for {email}"}
