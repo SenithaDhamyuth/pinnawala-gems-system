@@ -76,6 +76,20 @@ export default function AddGemstone() {
     return Object.keys(nextErrors).length === 0;
   };
 
+  // Helper function to check if gem data is present (button disable check)
+  const hasValidGemData = () => {
+    return (
+      form.gem_name &&
+      typeof form.gem_name === 'string' &&
+      form.gem_name.trim().length > 0 &&
+      form.gem_type &&
+      typeof form.gem_type === 'string' &&
+      form.gem_type.trim().length > 0 &&
+      Array.isArray(form.images) &&
+      form.images.length > 0
+    );
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!validate()) {
@@ -109,6 +123,11 @@ export default function AddGemstone() {
             <div className="inv-card-header">
               <span className="inv-card-title">Gemstone Details</span>
             </div>
+            {errors.gem && (
+              <div style={{ padding: "12px 16px", backgroundColor: "#fee2e2", borderBottom: "1px solid #fca5a5", color: "#991b1b" }}>
+                <span style={{ fontSize: "14px", fontWeight: "500" }}>{errors.gem}</span>
+              </div>
+            )}
             <div className="inv-card-body">
               <div className="inv-form-grid">
                 {[
@@ -272,7 +291,7 @@ export default function AddGemstone() {
                 </div>
 
                 <div className="inv-field inv-form-full">
-                  <label className="inv-label">Images</label>
+                  <label className="inv-label inv-label-req">Images (at least 1 required)</label>
                   <ImageUpload images={form.images} onChange={(value) => setField("images", value)} />
                   {errors.images && <span className="inv-error-msg">{errors.images}</span>}
                 </div>
@@ -281,7 +300,12 @@ export default function AddGemstone() {
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-            <button type="submit" className="inv-btn inv-btn-primary" disabled={loading}>
+            <button
+              type="submit"
+              className="inv-btn inv-btn-primary"
+              disabled={loading || !hasValidGemData()}
+              title={!hasValidGemData() ? "Please add a valid Gem Name, Gem Type, and at least one Image" : ""}
+            >
               <Save size={16} /> {loading ? "Saving..." : "Save Gemstone"}
             </button>
             <button

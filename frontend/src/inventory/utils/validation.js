@@ -31,6 +31,23 @@ export function validateInventoryForm(form) {
   const errors = {};
   const sanitized = sanitizeInventoryForm(form);
 
+  // CRITICAL VALIDATION: At least one gem must be added
+  // Both gem_name AND gem_type must be present and have content
+  const gemNameIsValid = sanitized.gem_name && typeof sanitized.gem_name === 'string' && sanitized.gem_name.trim().length > 0;
+  const gemTypeIsValid = sanitized.gem_type && typeof sanitized.gem_type === 'string' && sanitized.gem_type.trim().length > 0;
+  
+  if (!gemNameIsValid || !gemTypeIsValid) {
+    errors.gem = "Please add at least one Gem to continue.";
+    // Return immediately - this is a critical error that blocks all other validation
+    return { errors, sanitized };
+  }
+
+  // CRITICAL VALIDATION: At least one image must be uploaded
+  if (!sanitized.images || sanitized.images.length === 0) {
+    errors.images = "Please add at least one Gem to continue.";
+  }
+
+  // Continue with individual field validation only if gem data exists
   if (!sanitized.gem_name) errors.gem_name = "Gem name is required";
   else if (sanitized.gem_name.length < 2) errors.gem_name = "Gem name must be at least 2 characters";
   else if (sanitized.gem_name.length > 120) errors.gem_name = "Gem name must be 120 characters or fewer";
@@ -93,7 +110,9 @@ export function validateInventoryForm(form) {
   else if (sanitized.description.length < 10) errors.description = "Description must be at least 10 characters";
   else if (sanitized.description.length > 2000) errors.description = "Description must be 2000 characters or fewer";
 
-  if (sanitized.images.length > MAX_IMAGES) {
+  if (sanitized.images.length === 0) {
+    errors.images = "Please add at least one Gem to continue.";
+  } else if (sanitized.images.length > MAX_IMAGES) {
     errors.images = `You can upload up to ${MAX_IMAGES} images`;
   }
 
