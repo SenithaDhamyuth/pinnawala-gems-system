@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { registerUser, loginUser, uploadKYC, verifyNIC } from "../services/api"
+import { registerUser, loginUser, uploadKYC } from "../services/api"
 
 const style = document.createElement("style")
 style.textContent = `
@@ -296,35 +296,6 @@ style.textContent = `
     margin-top: 8px;
   }
 
-  .sr-upload-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 999px;
-    padding: 6px 12px;
-    font-size: 0.78rem;
-    font-weight: 700;
-    margin-top: 8px;
-  }
-
-  .sr-upload-badge.success {
-    background: #ecfdf5;
-    border: 1px solid #34d399;
-    color: #065f46;
-  }
-
-  .sr-upload-badge.error {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #991b1b;
-  }
-
-  .sr-upload-badge.pending {
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    color: #1d4ed8;
-  }
-
   /* Gem chips */
   .sr-gems-wrap {
     display: flex;
@@ -506,8 +477,6 @@ export default function SellerRegister() {
   const [loading, setLoading] = useState(false)
   const [verificationMessage, setVerificationMessage] = useState("")
   const [isGovernmentVerified, setIsGovernmentVerified] = useState(false)
-  const [nicVerified, setNicVerified] = useState(false)
-  const [nicVerificationResult, setNicVerificationResult] = useState(null)
   const [loginData, setLoginData] = useState({ email: "", password: "" })
 
   const [personal, setPersonal] = useState({
@@ -524,6 +493,23 @@ export default function SellerRegister() {
     ngja_number: "",
   })
 
+  // ── Validation helpers ──
+  const validateEmail = (email) => /^[^@]+@gmail\.com$/.test(email)
+
+  const validatePassword = (password) => {
+    if (password.length < 8) return "Password must be at least 8 characters."
+    if (!/[A-Z]/.test(password)) return "Password must include at least one uppercase letter."
+    if (!/[0-9]/.test(password)) return "Password must include at least one number."
+    if (!/[^A-Za-z0-9]/.test(password)) return "Password must include at least one special character."
+    return null
+  }
+
+  // Strips non-digits, enforces max 11 digits after '+'
+  const formatPhone = (value) => {
+    const digits = value.replace(/[^\d]/g, "")
+    return "+" + digits.slice(0, 11)
+  }
+
   const toggleGem = (gem) => {
     setBusiness((prev) => ({
       ...prev,
@@ -536,8 +522,8 @@ export default function SellerRegister() {
   const handleSellerLogin = async () => {
     setMessage("")
     setMessageType("error")
-    if (!loginData.email.includes("@") || !loginData.email.includes(".")) {
-      setMessage("Please enter a valid email address.")
+    if (!validateEmail(loginData.email)) {
+      setMessage("Please include an '@gmail.com' in the gmail address")
       return
     }
     if (!loginData.password) {
@@ -559,36 +545,28 @@ export default function SellerRegister() {
     setLoading(false)
   }
 
-  const handleVerifyNIC = async () => {
+  // ── Step 1 → 2 validation ──
+  const handleStep1Next = () => {
     setMessage("")
-    setMessageType("error")
-    if (!nicFront) {
-      setMessage("Please upload the NIC front image or PDF before verifying.")
+    if (!personal.full_name || !personal.email || !personal.phone || !personal.password) {
+      setMessage("Please complete all personal details.")
       return
     }
-    if (!personal.email) {
-      setMessage("Please enter your email address first so the verification can be linked to your account.")
+    if (!validateEmail(personal.email)) {
+      setMessage("Please include an '@gmail.com' in the gmail address")
       return
     }
-
-    setLoading(true)
-    try {
-      const form = new FormData()
-      form.append("seller_email", personal.email)
-      form.append("file", nicFront)
-      const response = await verifyNIC(form)
-      const success = response.data?.valid === true
-      setNicVerified(success)
-      setNicVerificationResult(response.data)
-      setMessageType(success ? "success" : "error")
-      setMessage(success
-        ? "NIC verification successful. You may continue to the next step."
-        : response.data?.message || "NIC verification failed. Please upload a clearer NIC front or use a different file."
-      )
-    } catch (err) {
-      setMessage(err?.response?.data?.detail || err?.response?.data?.message || "NIC verification failed. Please try again.")
+    // Require exactly 12 characters total: '+' + 11 digits
+    if (personal.phone.length < 12) {
+      setMessage("Please enter a valid phone number (e.g. +94771234567 — 12 characters).")
+      return
     }
-    setLoading(false)
+    const passwordError = validatePassword(personal.password)
+    if (passwordError) {
+      setMessage(passwordError)
+      return
+    }
+    setStep(2)
   }
 
   const handleSubmit = async () => {
@@ -598,8 +576,17 @@ export default function SellerRegister() {
       setMessage("Please complete all personal details before submitting.")
       return
     }
-    if (!nicVerified) {
-      setMessage("Please verify your NIC before submitting your seller application.")
+    if (!validateEmail(personal.email)) {
+      setMessage("Please include an '@gmail.com' in the gmail address")
+      return
+    }
+    if (personal.phone.length < 12) {
+      setMessage("Please enter a valid phone number (e.g. +94771234567 — 12 characters).")
+      return
+    }
+    const passwordError = validatePassword(personal.password)
+    if (passwordError) {
+      setMessage(passwordError)
       return
     }
     if (!nicFront || !ngjaLicense) {
@@ -612,7 +599,6 @@ export default function SellerRegister() {
     }
     setLoading(true)
     try {
-      // If account already exists, continue with KYC upload instead of blocking submit.
       try {
         await registerUser({
           full_name: personal.full_name, email: personal.email,
@@ -632,7 +618,7 @@ export default function SellerRegister() {
       form.append("nic_front", nicFront)
       form.append("ngja_license", ngjaLicense)
       const uploadResponse = await uploadKYC(form)
-      
+
       const isVerified = uploadResponse.data?.is_verified_seller === true
       const messageText = uploadResponse.data?.kyc_message || uploadResponse.data?.message || ""
       setVerificationMessage(messageText)
@@ -643,7 +629,7 @@ export default function SellerRegister() {
       } else {
         window.alert("You're not verified seller. Please register with the government to become a verified seller.")
       }
-      
+
       setStep(5)
     } catch (err) {
       const detail = err?.response?.data?.detail
@@ -659,13 +645,13 @@ export default function SellerRegister() {
   /* ── Success Screen ── */
   if (step === 5) {
     const isVerified = isGovernmentVerified
-    
+
     return (
       <div className="sr-success">
         <div className="sr-success-card">
           <div className="sr-success-icon" style={{
-            background: isVerified 
-              ? "linear-gradient(135deg, #10b981, #059669)" 
+            background: isVerified
+              ? "linear-gradient(135deg, #10b981, #059669)"
               : "linear-gradient(135deg, #f59e0b, #d97706)"
           }}>
             {isVerified ? "✅" : "📋"}
@@ -713,7 +699,8 @@ export default function SellerRegister() {
             { label: "💎 Seller", path: "/seller", role: "seller" },
             { label: "🛡️ Admin",  path: "/admin",  role: "admin"  },
           ].map(({ label, path, role }) => {
-            const isActive = role === "seller"
+            const currentPath = window.location.pathname
+            const isActive = currentPath === path || (currentPath === "/seller" && role === "seller")
             return (
               <button key={role} onClick={() => navigate(path)} style={{
                 flex: 1,
@@ -746,10 +733,10 @@ export default function SellerRegister() {
         <div className="sr-subtitle">Complete all 4 steps to become a verified gem seller on Pinnawala</div>
 
         <div className="sr-tab-bar">
-          <button className={`sr-tab ${mode === "signin" ? "active" : "inactive"}`} onClick={() => { setMode("signin"); setMessage(""); }}>
+          <button className={`sr-tab ${mode === "signin" ? "active" : ""}`} onClick={() => { setMode("signin"); setMessage("") }}>
             SIGN IN
           </button>
-          <button className={`sr-tab ${mode === "signup" ? "active" : "inactive"}`} onClick={() => { setMode("signup"); setMessage(""); }}>
+          <button className={`sr-tab ${mode === "signup" ? "active" : ""}`} onClick={() => { setMode("signup"); setMessage("") }}>
             SIGN UP
           </button>
         </div>
@@ -757,27 +744,40 @@ export default function SellerRegister() {
         {mode === "signin" ? (
           <div className="sr-card">
             <div className="sr-step-title">Seller Sign In</div>
-            <div className="sr-step-desc">Sign in with your seller account email and password.</div>
+            <div className="sr-step-desc">Sign in with your seller account gmail and password.</div>
 
-            <label className="sr-label">✉️ Email Address</label>
-            <input className="sr-input" type="email" placeholder="seller@email.com"
-              autoComplete="off" value={loginData.email}
-              onChange={(e) => setLoginData({ ...loginData, email: e.target.value })} />
+            <label className="sr-label">✉️ Gmail Address</label>
+            <input
+              className="sr-input"
+              type="text"
+              placeholder="your@gmail.com"
+              autoComplete="off"
+              value={loginData.email}
+              pattern="[^@]+@gmail\.com"
+              title="Please include a '@gmail.com' in the gmail address"
+              required
+              onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+            />
 
             <label className="sr-label">🔒 Password</label>
-            <input className="sr-input" type="password" placeholder="Enter password"
-              autoComplete="new-password" value={loginData.password}
-              onChange={(e) => setLoginData({ ...loginData, password: e.target.value })} />
+            <input
+              className="sr-input"
+              type="password"
+              placeholder="Enter password"
+              autoComplete="new-password"
+              value={loginData.password}
+              onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+            />
 
             {message && (
-              <div className={`sr-error-msg ${messageType === "success" ? "sr-success-msg" : ""}`}>
-                {message}
+              <div className={messageType === "success" ? "sr-success-msg" : "sr-error-msg"}>
+                {messageType === "success" ? "✅ " : "⚠️ "}{message}
               </div>
             )}
 
             <div className="sr-btn-row">
               <button className="sr-btn-next" onClick={handleSellerLogin} disabled={loading}>
-                {loading ? "⏳ Signing in…" : "Sign In"}
+                {loading ? "⏳ Signing in…" : "Sign In →"}
               </button>
             </div>
           </div>
@@ -811,262 +811,232 @@ export default function SellerRegister() {
             {/* CARD */}
             <div className="sr-card">
 
-          {/* STEP 1 — Personal */}
-          {step === 1 && (
-            <div>
-              <div className="sr-step-title">Personal Details</div>
-              <div className="sr-step-desc">Your basic identification information as it appears on your NIC</div>
+              {/* STEP 1 — Personal */}
+              {step === 1 && (
+                <div>
+                  <div className="sr-step-title">Personal Details</div>
+                  <div className="sr-step-desc">Your basic identification information as it appears on your NIC</div>
 
-              <div className="sr-grid-2">
-                <div>
-                  <label className="sr-label">👤 Full Name</label>
-                  <input className="sr-input" placeholder="Your legal full name"
-                    autoComplete="off" value={personal.full_name}
-                    onChange={(e) => setPersonal({ ...personal, full_name: e.target.value })} />
-                </div>
-                <div>
-                  <label className="sr-label">🪪 NIC Number</label>
-                  <input className="sr-input" placeholder="e.g. 200012345678"
-                    autoComplete="off" value={personal.nic_number}
-                    onChange={(e) => setPersonal({ ...personal, nic_number: e.target.value })} />
-                </div>
-                <div>
-                  <label className="sr-label">✉️ Email Address</label>
-                  <input className="sr-input" type="email" placeholder="seller@email.com"
-                    autoComplete="off" value={personal.email}
-                    onChange={(e) => {
-                      setPersonal({ ...personal, email: e.target.value })
-                      setNicVerified(false)
-                      setNicVerificationResult(null)
-                    }} />
-                </div>
-                <div>
-                  <label className="sr-label">📱 Phone Number</label>
-                  <input className="sr-input" placeholder="+94 77 000 0000"
-                    autoComplete="off" value={personal.phone}
-                    onKeyPress={(e) => { if (!/[0-9+]/.test(e.key)) e.preventDefault() }}
-                    onChange={(e) => setPersonal({ ...personal, phone: e.target.value.replace(/[^0-9+]/g, "") })} />
-                </div>
-                <div>
-                  <label className="sr-label">📍 District</label>
-                  <select className="sr-input" style={{ cursor: "pointer" }} value={personal.district}
-                    onChange={(e) => setPersonal({ ...personal, district: e.target.value })}>
-                    <option value="">Select district…</option>
-                    {["Ratnapura","Colombo","Kandy","Galle","Matara","Kurunegala","Other"].map(d => (
-                      <option key={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="sr-label">🔒 Password</label>
-                  <input className="sr-input" type="password" placeholder="Minimum 8 characters"
-                    autoComplete="new-password" value={personal.password}
-                    onChange={(e) => setPersonal({ ...personal, password: e.target.value })} />
-                </div>
-              </div>
+                  {message && <div className="sr-error-msg">⚠️ {message}</div>}
 
-              <div className="sr-btn-row">
-                <div />
-                <button className="sr-btn-next" onClick={() => setStep(2)}>
-                  Next: KYC Documents →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2 — KYC */}
-          {step === 2 && (
-            <div>
-              <div className="sr-step-title">KYC Documents</div>
-              <div className="sr-step-desc">Upload clear copies — accepted formats: JPG, PNG, PDF</div>
-
-              <label className="sr-label">🪪 NIC Front Side</label>
-              <div className="sr-upload-zone">
-                <span className="sr-upload-icon">🪪</span>
-                <div className="sr-upload-title">Upload NIC Front</div>
-                <div className="sr-upload-sub">Click to browse or drag & drop your file here</div>
-                <input type="file" accept=".jpg,.png,.pdf"
-                  onChange={(e) => {
-                    setNicFront(e.target.files[0])
-                    setNicVerified(false)
-                    setNicVerificationResult(null)
-                  }}
-                  style={{ fontSize: "0.82rem", color: "#3b6aff" }} />
-                {nicFront && (
-                  <>
-                    <div className="sr-upload-ok">✅ {nicFront.name}</div>
-                    <div className={`sr-upload-badge ${nicVerificationResult ? (nicVerified ? "success" : "error") : "pending"}`}>
-                      {nicVerificationResult ? (nicVerified ? "✅ Verified" : "❌ Not verified") : "⏳ Pending verification"}
+                  <div className="sr-grid-2">
+                    <div>
+                      <label className="sr-label">👤 Full Name</label>
+                      <input className="sr-input" placeholder="Your legal full name"
+                        autoComplete="off" value={personal.full_name}
+                        onChange={(e) => setPersonal({ ...personal, full_name: e.target.value })} />
                     </div>
-                  </>
-                )}
-              </div>
-
-              <label className="sr-label">🪪 NIC Back Side</label>
-              <div className="sr-upload-zone">
-                <span className="sr-upload-icon">🪪</span>
-                <div className="sr-upload-title">Upload NIC Back</div>
-                <div className="sr-upload-sub">Click to browse or drag & drop your file here</div>
-                <input type="file" accept=".jpg,.png,.pdf"
-                  onChange={(e) => setNicBack(e.target.files[0])}
-                  style={{ fontSize: "0.82rem", color: "#3b6aff" }} />
-                {nicBack && (
-                  <div className="sr-upload-ok">✅ {nicBack.name}</div>
-                )}
-              </div>
-
-              <label className="sr-label">📋 NGJA License</label>
-              <div className="sr-upload-zone">
-                <span className="sr-upload-icon">📋</span>
-                <div className="sr-upload-title">Upload NGJA License</div>
-                <div className="sr-upload-sub">National Gem & Jewellery Authority license — required for sellers</div>
-                <input type="file" accept=".jpg,.png,.pdf"
-                  onChange={(e) => setNgjaLicense(e.target.files[0])}
-                  style={{ fontSize: "0.82rem", color: "#3b6aff" }} />
-                {ngjaLicense && (
-                  <div className="sr-upload-ok">✅ {ngjaLicense.name}</div>
-                )}
-              </div>
-
-              <label className="sr-label">🔢 NGJA License Number</label>
-                <div style={{ marginBottom: "16px" }}>
-                    <input
+                    <div>
+                      <label className="sr-label">🪪 NIC Number</label>
+                      <input className="sr-input" placeholder="e.g. 200012345678"
+                        autoComplete="off" value={personal.nic_number}
+                        onChange={(e) => setPersonal({ ...personal, nic_number: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="sr-label">✉️ Gmail Address</label>
+                      <input
                         className="sr-input"
-                        placeholder="e.g. NGJA-2024-001"
+                        type="text"
+                        placeholder="your@gmail.com"
                         autoComplete="off"
-                        value={business.ngja_number}
-                        onChange={(e) => setBusiness({
-                            ...business,
-                            ngja_number: e.target.value
-                        })}
+                        value={personal.email}
+                        pattern="[^@]+@gmail\.com"
+                        title="Please include a '@gmail.com' in the gmail address"
+                        required
+                        onChange={(e) => setPersonal({ ...personal, email: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="sr-label">📱 Phone Number</label>
+                      <input
+                        className="sr-input"
+                        placeholder="+94771234567"
+                        autoComplete="off"
+                        value={personal.phone}
+                        maxLength={12}
+                        onKeyPress={(e) => { if (!/[0-9+]/.test(e.key)) e.preventDefault() }}
+                        onChange={(e) => setPersonal({ ...personal, phone: formatPhone(e.target.value) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="sr-label">📍 District</label>
+                      <select className="sr-input" style={{ cursor: "pointer" }} value={personal.district}
+                        onChange={(e) => setPersonal({ ...personal, district: e.target.value })}>
+                        <option value="">Select district…</option>
+                        {["Ratnapura","Colombo","Kandy","Galle","Matara","Kurunegala","Other"].map(d => (
+                          <option key={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="sr-label">🔒 Password</label>
+                      <input
+                        className="sr-input"
+                        type="password"
+                        placeholder="Min 8 chars, uppercase, number, special char"
+                        autoComplete="new-password"
+                        value={personal.password}
+                        onChange={(e) => setPersonal({ ...personal, password: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sr-btn-row">
+                    <div />
+                    <button className="sr-btn-next" onClick={handleStep1Next}>
+                      Next: KYC Documents →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2 — KYC */}
+              {step === 2 && (
+                <div>
+                  <div className="sr-step-title">KYC Documents</div>
+                  <div className="sr-step-desc">Upload clear copies — accepted formats: JPG, PNG, PDF</div>
+
+                  <label className="sr-label">🪪 NIC Front Side</label>
+                  <div className="sr-upload-zone">
+                    <span className="sr-upload-icon">🪪</span>
+                    <div className="sr-upload-title">Upload NIC Front</div>
+                    <div className="sr-upload-sub">Click to browse or drag & drop your file here</div>
+                    <input type="file" accept=".jpg,.png,.pdf"
+                      onChange={(e) => setNicFront(e.target.files[0])}
+                      style={{ fontSize: "0.82rem", color: "#3b6aff" }} />
+                    {nicFront && <div className="sr-upload-ok">✅ {nicFront.name}</div>}
+                  </div>
+
+                  <label className="sr-label">🪪 NIC Back Side</label>
+                  <div className="sr-upload-zone">
+                    <span className="sr-upload-icon">🪪</span>
+                    <div className="sr-upload-title">Upload NIC Back</div>
+                    <div className="sr-upload-sub">Click to browse or drag & drop your file here</div>
+                    <input type="file" accept=".jpg,.png,.pdf"
+                      onChange={(e) => setNicBack(e.target.files[0])}
+                      style={{ fontSize: "0.82rem", color: "#3b6aff" }} />
+                    {nicBack && <div className="sr-upload-ok">✅ {nicBack.name}</div>}
+                  </div>
+
+                  <label className="sr-label">📋 NGJA License</label>
+                  <div className="sr-upload-zone">
+                    <span className="sr-upload-icon">📋</span>
+                    <div className="sr-upload-title">Upload NGJA License</div>
+                    <div className="sr-upload-sub">National Gem & Jewellery Authority license — required for sellers</div>
+                    <input type="file" accept=".jpg,.png,.pdf"
+                      onChange={(e) => setNgjaLicense(e.target.files[0])}
+                      style={{ fontSize: "0.82rem", color: "#3b6aff" }} />
+                    {ngjaLicense && <div className="sr-upload-ok">✅ {ngjaLicense.name}</div>}
+                  </div>
+
+                  <label className="sr-label">🔢 NGJA License Number</label>
+                  <div style={{ marginBottom: "16px" }}>
+                    <input
+                      className="sr-input"
+                      placeholder="e.g. NGJA-2024-001"
+                      autoComplete="off"
+                      value={business.ngja_number}
+                      onChange={(e) => setBusiness({ ...business, ngja_number: e.target.value })}
                     />
-                </div>
-
-              <div style={{ marginTop: "16px" }}>
-                <button className="sr-btn-next" onClick={handleVerifyNIC} disabled={loading}>
-                  {loading ? "⏳ Verifying NIC…" : nicVerificationResult ? (nicVerified ? "✅ Verified NIC" : "❌ NIC Not Verified") : "Verify NIC Front"}
-                </button>
-                {nicVerificationResult && (
-                  <div style={{ marginTop: "12px", color: nicVerified ? "#047857" : "#b91c1c", fontWeight: 600 }}>
-                    {nicVerified ? "✅ NIC verified successfully." : "❌ NIC verification failed."}
-                    {nicVerificationResult.nic ? (
-                      <div style={{ fontSize: "0.84rem", marginTop: "6px", color: "#475569" }}>
-                        Recognized NIC: {nicVerificationResult.nic}
-                      </div>
-                    ) : null}
-                    {nicVerificationResult.extracted_text ? (
-                      <div style={{ fontSize: "0.7rem", marginTop: "6px", color: "#6b7280", fontStyle: "italic" }}>
-                        Extracted text: "{nicVerificationResult.extracted_text.substring(0, 100)}..."
-                      </div>
-                    ) : null}
                   </div>
-                )}
-              </div>
 
-              <div className="sr-btn-row">
-                <button className="sr-btn-back" onClick={() => setStep(1)}>← Back</button>
-                <button className="sr-btn-next" onClick={() => {
-                  setMessage("")
-                  if (!nicVerified) {
-                    setMessage("Please verify your NIC front before moving to business details.")
-                    return
-                  }
-                  setStep(3)
-                }}>
-                  Next: Business Info →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3 — Business */}
-          {step === 3 && (
-            <div>
-              <div className="sr-step-title">Business Information</div>
-              <div className="sr-step-desc">Tell us about your gemstone business and what you specialise in</div>
-
-              <div className="sr-grid-2">
-                <div>
-                  <label className="sr-label">🏪 Shop Name</label>
-                  <input className="sr-input" placeholder="e.g. Ratna Gems Palace"
-                    autoComplete="off" value={business.shop_name}
-                    onChange={(e) => setBusiness({ ...business, shop_name: e.target.value })} />
+                  <div className="sr-btn-row">
+                    <button className="sr-btn-back" onClick={() => setStep(1)}>← Back</button>
+                    <button className="sr-btn-next" onClick={() => setStep(3)}>
+                      Next: Business Info →
+                    </button>
+                  </div>
                 </div>
+              )}
+
+              {/* STEP 3 — Business */}
+              {step === 3 && (
                 <div>
-                  <label className="sr-label">📅 Years in Business</label>
-                  <select className="sr-input" style={{ cursor: "pointer" }}
-                    value={business.years_in_business}
-                    onChange={(e) => setBusiness({ ...business, years_in_business: e.target.value })}>
-                    <option value="">Select range…</option>
-                    {["Less than 1 year","1–3 years","3–5 years","5–10 years","10+ years"].map(y => (
-                      <option key={y}>{y}</option>
+                  <div className="sr-step-title">Business Information</div>
+                  <div className="sr-step-desc">Tell us about your gemstone business and what you specialise in</div>
+
+                  <div className="sr-grid-2">
+                    <div>
+                      <label className="sr-label">🏪 Shop Name</label>
+                      <input className="sr-input" placeholder="e.g. Ratna Gems Palace"
+                        autoComplete="off" value={business.shop_name}
+                        onChange={(e) => setBusiness({ ...business, shop_name: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="sr-label">📅 Years in Business</label>
+                      <select className="sr-input" style={{ cursor: "pointer" }}
+                        value={business.years_in_business}
+                        onChange={(e) => setBusiness({ ...business, years_in_business: e.target.value })}>
+                        <option value="">Select range…</option>
+                        {["Less than 1 year","1–3 years","3–5 years","5–10 years","10+ years"].map(y => (
+                          <option key={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <label className="sr-label">💎 Gem Types You Sell</label>
+                  <div className="sr-gems-wrap">
+                    {GEM_OPTIONS.map((gem, i) => (
+                      <button key={gem + i} className={`sr-gem-chip ${business.gem_types.includes(gem) ? "selected" : ""}`}
+                        onClick={() => toggleGem(gem)}>
+                        {gem}
+                      </button>
                     ))}
-                  </select>
-                </div>
-              </div>
-
-              <label className="sr-label">💎 Gem Types You Sell</label>
-              <div className="sr-gems-wrap">
-                {GEM_OPTIONS.map((gem, i) => (
-                  <button key={gem + i} className={`sr-gem-chip ${business.gem_types.includes(gem) ? "selected" : ""}`}
-                    onClick={() => toggleGem(gem)}>
-                    {gem}
-                  </button>
-                ))}
-              </div>
-
-              <label className="sr-label">📝 Business Description</label>
-              <textarea className="sr-input" rows={3}
-                placeholder="Briefly describe your business, your expertise and the gems you specialise in…"
-                autoComplete="off" value={business.business_description}
-                onChange={(e) => setBusiness({ ...business, business_description: e.target.value })} />
-
-              <div className="sr-btn-row">
-                <button className="sr-btn-back" onClick={() => setStep(2)}>← Back</button>
-                <button className="sr-btn-next" onClick={() => setStep(4)}>Next: Review →</button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4 — Review */}
-          {step === 4 && (
-            <div>
-              <div className="sr-step-title">Review & Submit</div>
-              <div className="sr-step-desc">Double-check your information before final submission</div>
-
-              <div style={{ background: "#f8faff", border: "1px solid #e3e9ff", borderRadius: "16px", padding: "8px 20px", marginBottom: "20px" }}>
-                {[
-                  ["👤 Full Name",    personal.full_name],
-                  ["✉️ Email",        personal.email],
-                  ["📱 Phone",        personal.phone],
-                  ["🪪 NIC Number",   personal.nic_number],
-                  ["📍 District",     personal.district],
-                  ["🏪 Shop Name",    business.shop_name],
-                  ["📅 Experience",   business.years_in_business],
-                  ["🪪 NIC Front",    nicFront   ? "✅ " + nicFront.name + (nicVerified ? " (Verified)" : " (Not verified)") : "❌ Not uploaded"],
-                  ["🪪 NIC Back",     nicBack    ? "✅ " + nicBack.name    : "❌ Not uploaded"],
-                  ["📋 NGJA License", ngjaLicense ? "✅ " + ngjaLicense.name : "❌ Not uploaded"],
-                  ["💎 Gem Types",    business.gem_types.join(", ") || "None selected"],
-                ].map(([key, val]) => (
-                  <div className="sr-review-row" key={key}>
-                    <span className="sr-review-key">{key}</span>
-                    <span className="sr-review-val">{val}</span>
                   </div>
-                ))}
-              </div>
 
-              {message && <div className="sr-error-msg">⚠️ {message}</div>}
+                  <label className="sr-label">📝 Business Description</label>
+                  <textarea className="sr-input" rows={3}
+                    placeholder="Briefly describe your business, your expertise and the gems you specialise in…"
+                    autoComplete="off" value={business.business_description}
+                    onChange={(e) => setBusiness({ ...business, business_description: e.target.value })} />
 
-              <div className="sr-btn-row">
-                <button className="sr-btn-back" onClick={() => setStep(3)}>← Back</button>
-                <button className="sr-btn-next" onClick={handleSubmit} disabled={loading}>
-                  {loading ? "⏳ Submitting…" : "✅ Submit Application"}
-                </button>
-              </div>
+                  <div className="sr-btn-row">
+                    <button className="sr-btn-back" onClick={() => setStep(2)}>← Back</button>
+                    <button className="sr-btn-next" onClick={() => setStep(4)}>Next: Review →</button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4 — Review */}
+              {step === 4 && (
+                <div>
+                  <div className="sr-step-title">Review & Submit</div>
+                  <div className="sr-step-desc">Double-check your information before final submission</div>
+
+                  <div style={{ background: "#f8faff", border: "1px solid #e3e9ff", borderRadius: "16px", padding: "8px 20px", marginBottom: "20px" }}>
+                    {[
+                      ["👤 Full Name",    personal.full_name],
+                      ["✉️ Gmail",        personal.email],
+                      ["📱 Phone",        personal.phone],
+                      ["🪪 NIC Number",   personal.nic_number],
+                      ["📍 District",     personal.district],
+                      ["🏪 Shop Name",    business.shop_name],
+                      ["📅 Experience",   business.years_in_business],
+                      ["🪪 NIC Front",    nicFront    ? "✅ " + nicFront.name    : "❌ Not uploaded"],
+                      ["🪪 NIC Back",     nicBack     ? "✅ " + nicBack.name     : "❌ Not uploaded"],
+                      ["📋 NGJA License", ngjaLicense ? "✅ " + ngjaLicense.name : "❌ Not uploaded"],
+                      ["💎 Gem Types",    business.gem_types.join(", ") || "None selected"],
+                    ].map(([key, val]) => (
+                      <div className="sr-review-row" key={key}>
+                        <span className="sr-review-key">{key}</span>
+                        <span className="sr-review-val">{val}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {message && <div className="sr-error-msg">⚠️ {message}</div>}
+
+                  <div className="sr-btn-row">
+                    <button className="sr-btn-back" onClick={() => setStep(3)}>← Back</button>
+                    <button className="sr-btn-next" onClick={handleSubmit} disabled={loading}>
+                      {loading ? "⏳ Submitting…" : "✅ Submit Application"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
             </div>
-          )}
-
-        </div>
           </>
         )}
       </div>

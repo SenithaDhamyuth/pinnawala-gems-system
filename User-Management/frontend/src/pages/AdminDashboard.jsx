@@ -285,7 +285,6 @@ document.head.appendChild(style)
 export default function AdminDashboard() {
   const navigate = useNavigate()
 
-  // ── exact same state as original ──
   const [loggedIn, setLoggedIn]     = useState(false)
   const [adminEmail, setAdminEmail] = useState("")
   const [adminPass, setAdminPass]   = useState("")
@@ -295,7 +294,6 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab]   = useState("kyc")
   const [message, setMessage]       = useState("")
 
-  // ── exact same logic as original ──
   const loadData = async () => {
     try {
       const kycRes   = await getPendingKYC()
@@ -308,11 +306,11 @@ export default function AdminDashboard() {
   }
 
   const handleAdminLogin = () => {
-    if (adminEmail === "admin@pinnawala.lk" && adminPass === "admin123") {
+    if (adminEmail === "pinnawalagems@gmail.com" && adminPass === "admin2000") {
       setLoggedIn(true)
       loadData()
     } else {
-      setLoginError("Wrong email or password!")
+      setLoginError("Wrong gmail or password!")
     }
   }
 
@@ -368,39 +366,49 @@ export default function AdminDashboard() {
               { label: "👤 User",   path: "/",       key: "user"   },
               { label: "💎 Seller", path: "/seller", key: "seller" },
               { label: "🛡️ Admin",  path: "/admin",  key: "admin"  },
-            ].map(({ label, path, key }) => (
-              <button key={key}
-                className={`ad-nav-tab ${key === "admin" ? "active" : "inactive"}`}
-                onClick={() => navigate(path)}>
-                {label}
-              </button>
-            ))}
+            ].map(({ label, path, key }) => {
+              const currentPath = window.location.pathname
+              const isActive = currentPath === path || (currentPath === "/admin" && key === "admin")
+              return (
+                <button key={key}
+                  className={`ad-nav-tab ${isActive ? "active" : "inactive"}`}
+                  onClick={() => navigate(path)}>
+                  {label}
+                </button>
+              )
+            })}
           </div>
 
           <div className="ad-login-icon">🛡️</div>
           <div className="ad-login-title">Admin Portal</div>
           <div className="ad-login-sub">Restricted — Authorized Personnel Only</div>
 
-          <label className="ad-label">✉️ Admin Email</label>
-          <input className="ad-input" type="text" placeholder="Enter admin email"
+          <label className="ad-label">✉️ Admin Gmail</label>
+          <input
+            className="ad-input"
+            type="text"
+            placeholder="Enter admin gmail"
             autoComplete="off"
             value={adminEmail}
-            onChange={(e) => setAdminEmail(e.target.value)} />
+            onChange={(e) => setAdminEmail(e.target.value)}
+          />
 
           <label className="ad-label">🔒 Password</label>
-          <input className="ad-input" type="password" placeholder="Enter password"
+          <input
+            className="ad-input"
+            type="password"
+            placeholder="Enter password"
             autoComplete="new-password"
             value={adminPass}
             onChange={(e) => setAdminPass(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAdminLogin()} />
+            onKeyDown={(e) => e.key === "Enter" && handleAdminLogin()}
+          />
 
           <button className="ad-btn-primary" onClick={handleAdminLogin}>
             Access Dashboard →
           </button>
 
           {loginError && <div className="ad-err">⚠️ {loginError}</div>}
-
-
 
         </div>
       </div>
@@ -484,7 +492,7 @@ export default function AdminDashboard() {
               : <table className="ad-table">
                   <thead>
                     <tr>
-                      {["Name", "Email", "Shop", "NIC", "Verified", "Actions"].map(h => (
+                      {["Name", "Gmail", "Shop", "NIC", "Verified", "Actions"].map(h => (
                         <th key={h} className="ad-th">{h}</th>
                       ))}
                     </tr>
@@ -529,7 +537,7 @@ export default function AdminDashboard() {
               : <table className="ad-table">
                   <thead>
                     <tr>
-                      {["Name", "Email", "Role", "Verified", "KYC Status", "Banned", "Actions"].map(h => (
+                      {["Name", "Gmail", "Role", "Verified", "KYC Status", "Banned", "Actions"].map(h => (
                         <th key={h} className="ad-th">{h}</th>
                       ))}
                     </tr>

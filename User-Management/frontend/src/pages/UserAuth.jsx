@@ -335,15 +335,28 @@ export default function UserAuth() {
     setMessage("")
   }, [mode])
 
-  const validateEmail = (email) => email.includes("@") && email.includes(".")
-  const formatPhone = (value) => "+" + value.replace(/[^\d]/g, "")
+  const validateEmail = (email) => /^[^@]+@gmail\.com$/.test(email)
+
+  const validatePassword = (password) => {
+    if (password.length < 8) return "Password must be at least 8 characters."
+    if (!/[A-Z]/.test(password)) return "Password must include at least one uppercase letter."
+    if (!/[0-9]/.test(password)) return "Password must include at least one number."
+    if (!/[^A-Za-z0-9]/.test(password)) return "Password must include at least one special character."
+    return null
+  }
+
+  // Strips non-digits, counts digits only, enforces max 11 digits after '+'
+  const formatPhone = (value) => {
+    const digits = value.replace(/[^\d]/g, "")
+    return "+" + digits.slice(0, 11)
+  }
 
   const showMsg = (text, type = "error") => { setMessage(text); setMsgType(type) }
 
   const handleLogin = async () => {
     setLoading(true); setMessage("")
     if (!validateEmail(loginData.email)) {
-      showMsg("Please enter a valid email address.")
+      showMsg("Please include an '@gmail.com' in the gmail address")
       setLoading(false); return
     }
     try {
@@ -366,11 +379,17 @@ export default function UserAuth() {
   const handleRegister = async () => {
     setLoading(true); setMessage("")
     if (!validateEmail(registerData.email)) {
-      showMsg("Please enter a valid email address.")
+      showMsg("Please include an '@gmail.com' in the gmail address")
       setLoading(false); return
     }
-    if (registerData.phone.length < 10) {
-      showMsg("Please enter a valid phone number.")
+    // Require exactly 12 characters total: '+' + 11 digits
+    if (registerData.phone.length < 12) {
+      showMsg("Please enter a valid phone number (e.g. +94771234567 — 12 characters).")
+      setLoading(false); return
+    }
+    const passwordError = validatePassword(registerData.password)
+    if (passwordError) {
+      showMsg(passwordError)
       setLoading(false); return
     }
     try {
@@ -394,8 +413,8 @@ export default function UserAuth() {
             { label: "💎 Seller", path: "/seller", role: "seller" },
             { label: "🛡️ Admin",  path: "/admin",  role: "admin"  },
           ].map(({ label, path, role }) => {
-            const currentRole = localStorage.getItem("role")
-            const isActive = currentRole === role || (!currentRole && role === "buyer")
+            const currentPath = window.location.pathname
+            const isActive = currentPath === path || (currentPath === "/" && role === "buyer")
             return (
               <button key={role} onClick={() => navigate(path)} style={{
                 flex: 1,
@@ -441,20 +460,33 @@ export default function UserAuth() {
           <div>
             <div className="auth-field">
               <label className="auth-label">
-                <span className="auth-label-icon">✉️</span> Email Address
+                <span className="auth-label-icon">✉️</span> Gmail Address
               </label>
-              <input className="auth-input" type="email" placeholder="your@email.com"
-                autoComplete="off" value={loginData.email}
-                onChange={(e) => setLoginData({ ...loginData, email: e.target.value })} />
+              <input
+                className="auth-input"
+                type="text"
+                placeholder="your@gmail.com"
+                autoComplete="off"
+                value={loginData.email}
+                pattern="[^@]+@gmail\.com"
+                title="Please include a '@gmail.com' in the gmail address"
+                required
+                onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+              />
             </div>
 
             <div className="auth-field">
               <label className="auth-label">
                 <span className="auth-label-icon">🔒</span> Password
               </label>
-              <input className="auth-input" type="password" placeholder="Enter your password"
-                autoComplete="new-password" value={loginData.password}
-                onChange={(e) => setLoginData({ ...loginData, password: e.target.value })} />
+              <input
+                className="auth-input"
+                type="password"
+                placeholder="Enter your password"
+                autoComplete="new-password"
+                value={loginData.password}
+                onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+              />
             </div>
 
             <button className="auth-btn" onClick={handleLogin} disabled={loading}>
@@ -479,20 +511,34 @@ export default function UserAuth() {
                 <label className="auth-label">
                   <span className="auth-label-icon">📱</span> Phone Number
                 </label>
-                <input className="auth-input" type="tel" placeholder="+94 77 000 0000"
-                  autoComplete="off" value={registerData.phone}
+                <input
+                  className="auth-input"
+                  type="tel"
+                  placeholder="+94771234567"
+                  autoComplete="off"
+                  value={registerData.phone}
+                  maxLength={12}
                   onKeyPress={(e) => { if (!/[0-9+]/.test(e.key)) e.preventDefault() }}
-                  onChange={(e) => setRegisterData({ ...registerData, phone: formatPhone(e.target.value) })} />
+                  onChange={(e) => setRegisterData({ ...registerData, phone: formatPhone(e.target.value) })}
+                />
               </div>
             </div>
 
             <div className="auth-field">
               <label className="auth-label">
-                <span className="auth-label-icon">✉️</span> Email Address
+                <span className="auth-label-icon">✉️</span> Gmail Address
               </label>
-              <input className="auth-input" type="email" placeholder="your@email.com"
-                autoComplete="off" value={registerData.email}
-                onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })} />
+              <input
+                className="auth-input"
+                type="text"
+                placeholder="your@gmail.com"
+                autoComplete="off"
+                value={registerData.email}
+                pattern="[^@]+@gmail\.com"
+                title="Please include a '@gmail.com' in the gmail address"
+                required
+                onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+              />
             </div>
 
             <div className="auth-field">
@@ -510,9 +556,14 @@ export default function UserAuth() {
               <label className="auth-label">
                 <span className="auth-label-icon">🔒</span> Password
               </label>
-              <input className="auth-input" type="password" placeholder="Minimum 8 characters"
-                autoComplete="new-password" value={registerData.password}
-                onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })} />
+              <input
+                className="auth-input"
+                type="password"
+                placeholder="Min 8 chars, uppercase, number, special char"
+                autoComplete="new-password"
+                value={registerData.password}
+                onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+              />
             </div>
 
             <button className="auth-btn" onClick={handleRegister} disabled={loading}>
