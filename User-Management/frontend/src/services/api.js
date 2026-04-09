@@ -26,7 +26,6 @@ API.interceptors.response.use(
 export const registerUser    = (data)          => API.post("/auth/register", data)
 export const loginUser       = (data)          => API.post("/auth/login", data)
 export const uploadKYC       = (formData)      => API.post("/auth/seller/upload-kyc", formData)
-export const verifyNIC       = (formData)      => API.post("/verify-nic", formData)
 export const getPendingKYC   = ()              => API.get("/auth/admin/pending-kyc")
 export const getAllUsers      = ()              => API.get("/auth/admin/users")
 export const updateKYCStatus = (email, action) => API.put(`/auth/admin/kyc/${email}/${action}`)

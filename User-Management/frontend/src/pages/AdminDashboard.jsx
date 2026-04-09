@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getPendingKYC, getAllUsers, updateKYCStatus, banUser } from "../services/api"
+import { getPendingKYC, getAllUsers, banUser } from "../services/api"
 
 const style = document.createElement("style")
 style.textContent = `
@@ -314,16 +314,6 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleKYC = async (email, action) => {
-    try {
-      await updateKYCStatus(email, action)
-      setMessage(`KYC ${action}d for ${email}`)
-      setPendingKYC((prev) => prev.filter((s) => s.email !== email))
-    } catch {
-      setMessage("Action failed.")
-    }
-  }
-
   const handleBan = async (email) => {
     if (!window.confirm(`Ban user: ${email}?`)) return
     try {
@@ -492,7 +482,7 @@ export default function AdminDashboard() {
               : <table className="ad-table">
                   <thead>
                     <tr>
-                      {["Name", "Gmail", "Shop", "NIC", "Verified", "Actions"].map(h => (
+                      {['Name', 'Gmail', 'Shop', 'BRC', 'Verified'].map(h => (
                         <th key={h} className="ad-th">{h}</th>
                       ))}
                     </tr>
@@ -505,22 +495,6 @@ export default function AdminDashboard() {
                         <td className="ad-td">{seller.shop_name || "—"}</td>
                         <td className="ad-td">{seller.nic_number || "—"}</td>
                         <td className="ad-td">{govBadge(seller.is_verified_seller)}</td>
-                        <td className="ad-td">
-                          {seller.is_verified_seller ? (
-                            <>
-                              <button className="ad-btn-approve"
-                                onClick={() => handleKYC(seller.email, "approve")}>
-                                ✅ Approve
-                              </button>
-                              <button className="ad-btn-reject"
-                                onClick={() => handleKYC(seller.email, "reject")}>
-                                ❌ Reject
-                              </button>
-                            </>
-                          ) : (
-                            <span className="ad-badge bdg-rejected">Seller not verified</span>
-                          )}
-                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -590,7 +590,7 @@ export default function SellerRegister() {
       return
     }
     if (!nicFront || !ngjaLicense) {
-      setMessage("Please upload NIC front and NGJA license before submitting.")
+      setMessage("Please upload NIC front and dealer license document before submitting.")
       return
     }
     if (!business.shop_name) {
@@ -632,11 +632,15 @@ export default function SellerRegister() {
 
       setStep(5)
     } catch (err) {
-      const detail = err?.response?.data?.detail
-      if (Array.isArray(detail) && detail.length > 0) {
-        setMessage(detail[0]?.msg || "Submission failed. Please try again.")
+      if (err?.message === "Network Error") {
+        setMessage("Unable to reach the API server. Start the backend on http://localhost:8000 and try again.")
       } else {
-        setMessage(detail || err?.response?.data?.message || err?.message || "Submission failed. Please try again.")
+        const detail = err?.response?.data?.detail
+        if (Array.isArray(detail) && detail.length > 0) {
+          setMessage(detail[0]?.msg || "Submission failed. Please try again.")
+        } else {
+          setMessage(detail || err?.response?.data?.message || err?.message || "Submission failed. Please try again.")
+        }
       }
     }
     setLoading(false)
@@ -815,7 +819,7 @@ export default function SellerRegister() {
               {step === 1 && (
                 <div>
                   <div className="sr-step-title">Personal Details</div>
-                  <div className="sr-step-desc">Your basic identification information as it appears on your NIC</div>
+                  <div className="sr-step-desc">Your basic identification information as it appears on your BRC</div>
 
                   {message && <div className="sr-error-msg">⚠️ {message}</div>}
 
@@ -827,8 +831,8 @@ export default function SellerRegister() {
                         onChange={(e) => setPersonal({ ...personal, full_name: e.target.value })} />
                     </div>
                     <div>
-                      <label className="sr-label">🪪 NIC Number</label>
-                      <input className="sr-input" placeholder="e.g. 200012345678"
+                      <label className="sr-label">🪪 BRC NUMBER</label>
+                      <input className="sr-input" placeholder="e.g. WBB9488 or 123456789V or 200012345678"
                         autoComplete="off" value={personal.nic_number}
                         onChange={(e) => setPersonal({ ...personal, nic_number: e.target.value })} />
                     </div>
@@ -918,26 +922,29 @@ export default function SellerRegister() {
                     {nicBack && <div className="sr-upload-ok">✅ {nicBack.name}</div>}
                   </div>
 
-                  <label className="sr-label">📋 NGJA License</label>
+                  <label className="sr-label">📋 Dealer License Document</label>
                   <div className="sr-upload-zone">
                     <span className="sr-upload-icon">📋</span>
-                    <div className="sr-upload-title">Upload NGJA License</div>
-                    <div className="sr-upload-sub">National Gem & Jewellery Authority license — required for sellers</div>
+                    <div className="sr-upload-title">Upload Dealer License</div>
+                    <div className="sr-upload-sub">Upload your active gem dealer license document — required for sellers</div>
                     <input type="file" accept=".jpg,.png,.pdf"
                       onChange={(e) => setNgjaLicense(e.target.files[0])}
                       style={{ fontSize: "0.82rem", color: "#3b6aff" }} />
                     {ngjaLicense && <div className="sr-upload-ok">✅ {ngjaLicense.name}</div>}
                   </div>
 
-                  <label className="sr-label">🔢 NGJA License Number</label>
+                  <label className="sr-label">Dealer License Number</label>
                   <div style={{ marginBottom: "16px" }}>
                     <input
                       className="sr-input"
-                      placeholder="e.g. NGJA-2024-001"
+                      placeholder="e.g. 20253DL30838"
                       autoComplete="off"
                       value={business.ngja_number}
                       onChange={(e) => setBusiness({ ...business, ngja_number: e.target.value })}
                     />
+                    <div style={{ fontSize: "0.78rem", color: "#8898cc", marginTop: "4px" }}>
+                      Enter the license number from your official gem dealer license
+                    </div>
                   </div>
 
                   <div className="sr-btn-row">
@@ -1009,13 +1016,13 @@ export default function SellerRegister() {
                       ["👤 Full Name",    personal.full_name],
                       ["✉️ Gmail",        personal.email],
                       ["📱 Phone",        personal.phone],
-                      ["🪪 NIC Number",   personal.nic_number],
+                      ["🪪 BRC Number",   personal.nic_number],
                       ["📍 District",     personal.district],
                       ["🏪 Shop Name",    business.shop_name],
                       ["📅 Experience",   business.years_in_business],
                       ["🪪 NIC Front",    nicFront    ? "✅ " + nicFront.name    : "❌ Not uploaded"],
                       ["🪪 NIC Back",     nicBack     ? "✅ " + nicBack.name     : "❌ Not uploaded"],
-                      ["📋 NGJA License", ngjaLicense ? "✅ " + ngjaLicense.name : "❌ Not uploaded"],
+                      ["📋 Dealer License Document", ngjaLicense ? "✅ " + ngjaLicense.name : "❌ Not uploaded"],
                       ["💎 Gem Types",    business.gem_types.join(", ") || "None selected"],
                     ].map(([key, val]) => (
                       <div className="sr-review-row" key={key}>

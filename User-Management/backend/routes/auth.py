@@ -44,12 +44,12 @@ def login(user: UserLogin):
 
 @router.post("/seller/upload-kyc")
 async def upload_kyc(
-    email:        str        = Form(...),
-    nic_number:   str        = Form(...),
-    shop_name:    str        = Form(...),
-    nic_front:    UploadFile = File(...),
-    ngja_license: UploadFile = File(...),
-    ngja_license_number: str = Form(""),
+    email:          str        = Form(...),
+    nic_number:     str        = Form(...),
+    shop_name:      str        = Form(...),
+    nic_front:      UploadFile = File(...),
+    ngja_license:   UploadFile = File(...),
+    ngja_license_number: str    = Form(""),
 ):
     folder = f"kyc_uploads/{email.replace('@','_')}"
     os.makedirs(folder, exist_ok=True)
@@ -67,56 +67,53 @@ async def upload_kyc(
     )
 
     verification_result = None
-    if ngja_license_number:
-        try:
-            verification_result = verify_government_license(ngja_license_number)
-            users_collection.update_one(
-                {"email": email},
-                {
-                    "$set": {
-                        "is_verified_seller": verification_result["is_verified"],
-                        "government_verification_message": verification_result["message"],
-                        "government_verified_at": verification_result["verified_at"] if verification_result.get("is_verified") else None,
-                        "kyc_status": "under_review",
-                    }
-                }
-            )
-
-            db_update = {
+    try:
+        verification_result = verify_government_license(ngja_license_number, nic_number)
+        users_collection.update_one(
+            {"email": email},
+            {
                 "$set": {
+                    "is_verified_seller": verification_result["is_verified"],
+                    "government_verification_message": verification_result["message"],
+                    "government_verified_at": verification_result["verified_at"] if verification_result.get("is_verified") else None,
                     "kyc_status": "under_review",
-                    "reviewed_at": datetime.utcnow(),
-                    "review_note": verification_result["message"],
-                    "government_verified": verification_result["is_verified"],
                 }
             }
-            # Keep kyc_documents data consistent for all sellers
-            db["kyc_documents"].update_one(
-                {"email": email},
-                db_update,
-                upsert=True
-            )
+        )
 
-            response = {
-                "message": verification_result["message"],
+        db_update = {
+            "$set": {
                 "kyc_status": "under_review",
-                "kyc_message": verification_result["message"],
-                "verification_type": "government_check",
-                "is_verified_seller": verification_result["is_verified"],
+                "reviewed_at": datetime.utcnow(),
+                "review_note": verification_result["message"],
+                "government_verified": verification_result["is_verified"],
             }
-            if not verification_result["is_verified"]:
-                response["advice"] = "Please register with the government to become a verified seller."
-            return response
+        }
+        # Keep kyc_documents data consistent for all sellers
+        db["kyc_documents"].update_one(
+            {"email": email},
+            db_update,
+            upsert=True
+        )
 
-        except Exception as e:
-            print(f"Government verification error: {str(e)}")
-            return {
-                "message": "KYC submitted. Admin will review soon.",
-                "kyc_status": "under_review",
-                "kyc_message": "Submitted successfully, waiting for admin review.",
-                "verification_type": "manual_review",
-                "is_verified_seller": False
-            }
+        response = {
+            "message": verification_result["message"],
+            "kyc_status": "under_review",
+            "kyc_message": verification_result["message"],
+            "verification_type": "government_check",
+            "is_verified_seller": verification_result["is_verified"],
+        }
+        return response
+
+    except Exception as e:
+        print(f"Government verification error: {str(e)}")
+        return {
+            "message": "KYC submitted. Admin will review soon.",
+            "kyc_status": "under_review",
+            "kyc_message": "Submitted successfully, waiting for admin review.",
+            "verification_type": "manual_review",
+            "is_verified_seller": False
+        }
 
     return {
         "message": "KYC submitted! Admin will review in 48 hours.",

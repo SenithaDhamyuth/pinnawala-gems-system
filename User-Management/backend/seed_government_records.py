@@ -2,9 +2,13 @@
 Seed script to populate government_records collection with sample data.
 Run this once to initialize test data for seller verification.
 
+This app uses the `government_records` collection and matches the
+`ngja_license` field against the dealer license number entered by sellers.
+That means your imported Active Dealer License list should map the
+Excel LICENSE NUMBER column into `ngja_license`.
+
 Usage: python seed_government_records.py
 """
-
 from core.database import db
 from datetime import datetime
 
@@ -12,7 +16,7 @@ from datetime import datetime
 SAMPLE_RECORDS = [
     {
         "nic_number": "200012345678",
-        "ngja_license": "NGJA-2023-12345",
+        "ngja_license": "20253DL30838",
         "full_name": "Kamal Silva",
         "shop_name": "Kamal's Gems",
         "is_valid": "true",
@@ -21,7 +25,7 @@ SAMPLE_RECORDS = [
     },
     {
         "nic_number": "199856234509",
-        "ngja_license": "NGJA-2023-54321",
+        "ngja_license": "20258DL33527",
         "full_name": "Ravi Seller",
         "shop_name": "Ravi's Precious Stones",
         "is_valid": "true",
@@ -30,7 +34,7 @@ SAMPLE_RECORDS = [
     },
     {
         "nic_number": "200145678901",
-        "ngja_license": "NGJA-2024-11111",
+        "ngja_license": "20257DL35064",
         "full_name": "Vidya Jayapala",
         "shop_name": "Vidya Gems & Jewels",
         "is_valid": "true",
@@ -39,7 +43,7 @@ SAMPLE_RECORDS = [
     },
     {
         "nic_number": "199723456789",
-        "ngja_license": "NGJA-2023-99999",
+        "ngja_license": "20251DL34777",
         "full_name": "Rose Seller",
         "shop_name": "Rose's Gem Collection",
         "is_valid": "true",
@@ -48,7 +52,7 @@ SAMPLE_RECORDS = [
     },
     {
         "nic_number": "200267890123",
-        "ngja_license": "NGJA-2024-88888",
+        "ngja_license": "20256DL32138",
         "full_name": "Kv Merchant",
         "shop_name": "KV's Gemstone House",
         "is_valid": "true",
@@ -57,7 +61,7 @@ SAMPLE_RECORDS = [
     },
     {
         "nic_number": "200256789012",
-        "ngja_license": "NGJA-2023-77777",
+        "ngja_license": "20251DL34866",
         "full_name": "Ganapa Silva",
         "shop_name": "Ganapa's Stones",
         "is_valid": "true",
