@@ -1,112 +1,109 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-import tensorflow as tf
-import numpy as np
-from PIL import Image
+from __future__ import annotations
+
 import io
-import os
+from pathlib import Path
 
-# ---------------------------------------------------------
-# NEW: අපි අලුතින් හදපු Database Routes ටික මෙතනින් Import කරගන්නවා
-from routes import router as gem_router 
-# ---------------------------------------------------------
+from fastapi import File, HTTPException, UploadFile, status
 
-# 1. FastAPI App එක මුලින්ම Initialize කරනවා
-app = FastAPI(title="Pinnawala Gems API") # Title එකක් දැම්මා ලස්සනට පේන්න
+from app.main import create_app
 
-# ---------------------------------------------------------
-# NEW: Database Endpoints ටික Main App එකට Link කරනවා 
-# (දැන් /api/gemstones/ හරහා Marketplace එක වැඩ කරනවා)
-app.include_router(gem_router, prefix="/api")
-# ---------------------------------------------------------
+try:
+    import numpy as np
+    from PIL import Image
+except ImportError:
+    np = None
+    Image = None
 
-# 2. React Frontend එකට Backend එකත් එක්ක කතා කරන්න අවසර දීම (CORS)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+try:
+    import tensorflow as tf
+except ImportError:
+    tf = None
 
-# ---------------------------------------------------------
-# පරණ AI Code එක එහෙම්මම තියෙනවා පල්ලෙහායින්
-# ---------------------------------------------------------
 
-# 3. අපේ AI Model එක සහ Labels තියෙන තැන් (Paths) 
-MODEL_PATH = '../ai_engine/gem_model.h5'
-LABEL_PATH = '../ai_engine/labels.txt'
+app = create_app()
 
+MODEL_PATH = Path(__file__).resolve().parent.parent / "ai_engine" / "gem_model.h5"
+LABEL_PATH = Path(__file__).resolve().parent.parent / "ai_engine" / "labels.txt"
 model = None
-class_names = []
+class_names: list[str] = []
 
-# 4. Server එක startup වෙද්දීම Model එක Load කරගැනීම 
+
 @app.on_event("startup")
-async def load_model():
+async def load_ai_model() -> None:
     global model, class_names
+
+    if tf is None or np is None or Image is None:
+        print("AI dependencies are not installed. Inventory APIs remain available.")
+        return
+
     try:
-        if os.path.exists(MODEL_PATH):
+        if MODEL_PATH.exists():
             model = tf.keras.models.load_model(MODEL_PATH)
-            print("✅ AI Model Loaded Successfully!")
+            print("AI model loaded successfully.")
         else:
-            print(f"❌ Warning: AI Model not found at {MODEL_PATH} (AI Prediction endpoint won't work)")
+            print(f"AI model not found at {MODEL_PATH}.")
 
-        if os.path.exists(LABEL_PATH):
-            with open(LABEL_PATH, 'r') as f:
-                class_names = [line.strip() for line in f.readlines()]
-            print(f"✅ Labels Loaded: {class_names}")
+        if LABEL_PATH.exists():
+            class_names = [line.strip() for line in LABEL_PATH.read_text().splitlines() if line.strip()]
+            print(f"Loaded AI labels: {class_names}")
         else:
-            print("❌ Warning: Labels not found!")
-    except Exception as e:
-        print(f"❌ Failed to load AI model: {e}")
+            print(f"AI labels not found at {LABEL_PATH}.")
+    except Exception as exc:
+        model = None
+        print(f"Failed to load AI model: {exc}")
 
-# 5. Image Pre-processing 
-def preprocess_image(image_bytes):
-    img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-    img = img.resize((224, 224)) 
-    img_array = np.array(img) / 255.0 
-    img_array = np.expand_dims(img_array, axis=0)
-    return img_array
 
-# 6. Prediction Endpoint
+def preprocess_image(image_bytes: bytes):
+    if Image is None or np is None:
+        raise RuntimeError("Image processing dependencies are not available.")
+
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image = image.resize((224, 224))
+    image_array = np.array(image) / 255.0
+    image_array = np.expand_dims(image_array, axis=0)
+    return image_array
+
+
 @app.post("/api/predict-gem")
-async def predict_gem(file: UploadFile = File(...)):
+async def predict_gem(file: UploadFile = File(...)) -> dict:
+    if tf is None or np is None or Image is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI prediction dependencies are not installed on this server.",
+        )
+
     if model is None:
-        return {"error": "AI Model is not loaded on the server."}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI model is not currently loaded.",
+        )
 
-    try:
-        contents = await file.read()
-        processed_image = preprocess_image(contents)
+    contents = await file.read()
+    processed_image = preprocess_image(contents)
+    predictions = model.predict(processed_image)
+    predicted_class_idx = int(np.argmax(predictions[0]))
+    confidence = float(predictions[0][predicted_class_idx]) * 100
 
-        predictions = model.predict(processed_image)
-        predicted_class_idx = np.argmax(predictions[0])
-        confidence = float(predictions[0][predicted_class_idx]) * 100
-
-        if confidence < 90.0:
-            return {
-                "gem_type": "Unrecognized Gem",
-                "confidence": round(confidence, 1),
-                "description": "AI Confidence score is too low. Please get a better, clearer picture of the gemstone and try again."
-            }
-
-        gem_type = class_names[predicted_class_idx] if class_names else "Unknown"
-
-        if gem_type == "Not_a_Gem":
-            desc = "This does not appear to be a recognized gemstone. Please upload a clear image of a gem."
-        else:
-            desc = f"Identified as {gem_type.replace('_', ' ')}. Recommended for further physical inspection to verify market value."
-
+    if confidence < 90.0:
         return {
-            "gem_type": gem_type.replace('_', ' '),
+            "gem_type": "Unrecognized Gem",
             "confidence": round(confidence, 1),
-            "description": desc
+            "description": (
+                "AI confidence is too low. Please upload a clearer gemstone image and try again."
+            ),
         }
-    except Exception as e:
-        return {"error": str(e)}
 
-# ---------------------------------------------------------
-# NEW: Root Endpoint එකක් හැදුවා Server එක වැඩද බලන්න
-@app.get("/")
-async def root():
-    return {"message": "Welcome to Pinnawala Gems Backend API. Server is Running!"}
-# ---------------------------------------------------------
+    gem_type = class_names[predicted_class_idx] if class_names else "Unknown"
+    if gem_type == "Not_a_Gem":
+        description = "This image does not appear to contain a recognized gemstone."
+    else:
+        description = (
+            f"Identified as {gem_type.replace('_', ' ')}. "
+            "Use this result as an assisting hint only."
+        )
+
+    return {
+        "gem_type": gem_type.replace("_", " "),
+        "confidence": round(confidence, 1),
+        "description": description,
+    }
