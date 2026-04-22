@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Diamond, Tag, Gavel, Award, Scale, Palette, ShoppingCart, MessageCircle } from 'lucide-react';
 import OfferModal from './OfferModal';
-import ChatWindow from '../ChatWindow';   // adjust path if your folder structure differs
+import { useNavigate } from 'react-router-dom';
+import { getImageUrl } from '../utils/imageUtil';
 
 const LISTING_ICON = { Direct_Sale: Tag, Auction: Gavel };
 
@@ -20,7 +21,7 @@ const Field = ({ label, value, icon: Icon }) => (
 
 export default function GemDetailModal({ gem, onClose }) {
   const [showOffer, setShowOffer] = useState(false);
-  const [showChat,  setShowChat]  = useState(false);
+  const navigate = useNavigate();
 
   const role      = localStorage.getItem('role');
   const ListingIcon = LISTING_ICON[gem.listing_type] || Tag;
@@ -33,6 +34,16 @@ export default function GemDetailModal({ gem, onClose }) {
   // only exists inside the Offer; for now sellers open chat from the Offer
   // Inbox (SellerDashboard), not from here.
   const gemForChat = { ...gem };
+
+  const handleChatWithSeller = () => {
+    navigate('/messages', {
+      state: {
+        gemId: gem._id,
+        gemName: gem.name
+      }
+    });
+    onClose(); // Close the modal when navigating to chat
+  };
 
   return (
     <>
@@ -79,7 +90,7 @@ export default function GemDetailModal({ gem, onClose }) {
             {/* Image */}
             <div className="md:w-2/5 bg-slate-50 rounded-2xl flex items-center justify-center min-h-[200px] p-4 border border-slate-100 flex-shrink-0">
               {gem.image_url ? (
-                <img src={gem.image_url} alt={gem.name}
+                <img src={getImageUrl(gem.image_url)} alt={gem.name}
                   className="max-w-full max-h-48 object-contain mix-blend-multiply drop-shadow-xl" />
               ) : (
                 <Diamond size={72} className="text-slate-200" strokeWidth={1} />
@@ -123,7 +134,7 @@ export default function GemDetailModal({ gem, onClose }) {
                     {/* ── Chat with Seller button ── */}
                     <motion.button
                       whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                      onClick={(e) => { e.stopPropagation(); setShowChat(true); }}
+                      onClick={handleChatWithSeller}
                       className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors border border-slate-200"
                     >
                       <MessageCircle size={15} /> Chat with Seller

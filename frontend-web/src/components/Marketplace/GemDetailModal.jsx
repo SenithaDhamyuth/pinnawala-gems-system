@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { X, Diamond, Tag, Gavel, Award, Scale, Palette, ShoppingCart, CreditCard, MessageCircle, ShieldCheck, Store } from 'lucide-react';
 import OfferModal from './OfferModal';
 import ChatWindow from '../ChatWindow';
+
 
 const LISTING_ICON = { Direct_Sale: Tag, Auction: Gavel };
 
@@ -22,26 +23,38 @@ const Field = ({ label, value, icon: Icon }) => (
 export default function GemDetailModal({ gem, onClose }) {
   const navigate = useNavigate();
   const [showOffer, setShowOffer] = useState(false);
-  const [showChat,  setShowChat]  = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
-  const role    = localStorage.getItem('role');
+  // Auth detection: token indicates ANY logged-in user, role determines type
   const token   = localStorage.getItem('token');
+  const role    = localStorage.getItem('role');
+  const isGuest = !token; // No token = guest/unauthenticated
+  const isBuyer = role === 'buyer' && token;
+  
   const ListingIcon = LISTING_ICON[gem.listing_type] || Tag;
   const isCompany   = gem.seller_type === 'Company';
   const isNegotiable = gem.is_negotiable || gem.listing_type === 'Negotiable';
 
-  // Auto-open chat only for non-company (seller) gems
-  useEffect(() => {
-    if (role === 'buyer' && token && !isCompany) {
-      const timer = setTimeout(() => setShowChat(true), 600);
-      return () => clearTimeout(timer);
-    }
-  }, [role, token, isCompany]);
 
-  const handleBuyNow = () => {
+
+  const handleBuyNow = (e) => {
+    e.preventDefault();
     onClose();
     navigate('/payment', { state: { gem } });
   };
+
+  const handleChatClick = (e) => {
+    e.preventDefault();
+    setShowChat(true);
+  };
+
+  const buildChatGem = () => ({
+    _id: gem._id,
+    name: gem.name,
+    seller_id: gem.seller_id,
+    image_url: gem.image_url,
+    initialMessage: `I am interested in buying ${gem.name} (ID: ${gem._id})`
+  });
 
   return (
     <>
@@ -142,25 +155,23 @@ export default function GemDetailModal({ gem, onClose }) {
 
               {/* ACTION BUTTONS (Bottom Right) */}
               <div className="mt-auto pt-4 border-t border-slate-100 space-y-3">
-                {/* Chat Toggle — visible for all buyer roles, labels adapt to company/seller */}
-                {role === 'buyer' && (
+                {/* Chat button — buyers navigate to Messages, guests see login prompt */}
+                {isBuyer && (
                   <button
-                    onClick={() => setShowChat(c => !c)}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-bold transition-all shadow-sm ${showChat ? 'bg-blue-600 text-white shadow-blue-600/20' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200'}`}
+                    type="button"
+                    onClick={handleChatClick}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-bold transition-all shadow-sm bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200"
                   >
                     <MessageCircle size={16} />
-                    {showChat
-                      ? 'Hide Chat'
-                      : isCompany
-                        ? 'Chat with Pinnawala Admin'
-                        : 'Chat with Seller'}
+                    {isCompany ? 'Chat with Pinnawala Admin' : 'Chat with Seller'}
                   </button>
                 )}
 
                 <div className="flex gap-3">
-                  {role === 'buyer' ? (
+                  {isBuyer ? (
                     <>
                       <motion.button
+                        type="button"
                         whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                         onClick={handleBuyNow}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-emerald-500 transition-colors"
@@ -170,6 +181,7 @@ export default function GemDetailModal({ gem, onClose }) {
                       
                       {isNegotiable && (
                         <motion.button
+                          type="button"
                           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                           onClick={() => setShowOffer(true)}
                           className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-md hover:bg-slate-800 transition-colors"
@@ -178,10 +190,17 @@ export default function GemDetailModal({ gem, onClose }) {
                         </motion.button>
                       )}
                     </>
+                  ) : isGuest ? (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => { onClose(); navigate('/login'); }}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-blue-500 transition-colors"
+                    >
+                      <ShieldCheck size={16} /> Login to Make Offer
+                    </motion.button>
                   ) : (
-                    <div className="w-full bg-blue-50/50 border border-blue-100 p-3 rounded-xl text-center flex flex-col items-center">
-                       <p className="text-xs font-bold text-slate-600">Please log in to purchase or make an offer.</p>
-                       <button onClick={() => { onClose(); navigate('/login'); }} className="mt-1 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline">Go to Login</button>
+                    <div className="w-full bg-slate-100 border border-slate-200 p-3 rounded-xl text-center flex flex-col items-center">
+                       <p className="text-xs font-bold text-slate-700">This feature is available for buyers only.</p>
                     </div>
                   )}
                 </div>
@@ -200,12 +219,13 @@ export default function GemDetailModal({ gem, onClose }) {
         />
       )}
 
-      {/* ── Chat Window — works for both seller gems and company (admin) gems ── */}
+      {/* Chat Modal Overlay */}
       <AnimatePresence>
-        {showChat && role === 'buyer' && (
-          <ChatWindow
-            gem={gem}
+        {showChat && (
+          <ChatWindow 
+            gem={buildChatGem()} 
             onClose={() => setShowChat(false)}
+            initialMessage={buildChatGem().initialMessage}
           />
         )}
       </AnimatePresence>

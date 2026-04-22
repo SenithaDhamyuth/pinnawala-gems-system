@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import API from '../services/api';
+import { useLocation } from 'react-router-dom';
+import { getImageUrl } from '../utils/imageUtil';
 
 const SOCKET_URL = 'http://localhost:5001';
 
@@ -73,7 +75,7 @@ function MessageBubble({ msg, isOwn, prevMsg, onDelete, onReact }) {
             : msg.type === 'image' ? 'rounded-bl-sm' : 'bg-white border border-slate-100 text-slate-800 rounded-bl-sm hover:bg-slate-50'
         }`}>
           {msg?.type === 'image' ? (
-             <img src={msg?.text || ''} className="max-w-[220px] rounded-xl object-contain" alt="Attachment" />
+             <img src={getImageUrl(msg?.text || '')} className="max-w-[220px] rounded-xl object-contain" alt="Attachment" />
           ) : (
              msg?.text
           )}
@@ -152,7 +154,7 @@ function TypingIndicator({ name }) {
   );
 }
 
-export default function ChatWindow({ gem, onClose }) {
+export default function ChatWindow({ gem, onClose, initialMessage }) {
   const token     = localStorage.getItem('token');
   const decoded   = parseJwt(token);
   const currentUserId   = decoded?.id;
@@ -165,7 +167,7 @@ export default function ChatWindow({ gem, onClose }) {
   const roomId   = gemId && buyerId != null && sellerId != null ? `${gemId}_${buyerId}_${sellerId}` : null;
 
   const [messages,    setMessages]    = useState([]);
-  const [input,       setInput]       = useState('');
+  const [input,       setInput]       = useState(initialMessage || '');
   const [connected,   setConnected]   = useState(false);
   const [loading,     setLoading]     = useState(true);
   const [typingUser,  setTypingUser]  = useState(null);
@@ -392,7 +394,7 @@ export default function ChatWindow({ gem, onClose }) {
         <div className="flex items-center gap-3 min-w-0 relative z-10">
           <div className="relative flex-shrink-0">
             {gem?.image_url ? (
-              <img src={gem.image_url.startsWith('http') ? gem.image_url : `http://localhost:5001${gem.image_url}`} alt={gemName}
+              <img src={getImageUrl(gem.image_url)} alt={gemName}
                 className="w-10 h-10 rounded-[14px] object-cover ring-2 ring-white/10 shadow-sm" />
             ) : (
               <div className="w-10 h-10 rounded-[14px] bg-slate-800 flex items-center justify-center border border-white/5">

@@ -51,11 +51,14 @@ exports.createOffer = async (req, res) => {
   }
 };
 
-// Seller sees all offers on their gems
+// Seller sees all offers on their gems; Admin sees ALL offers platform-wide
 exports.getSellerOffers = async (req, res) => {
   try {
-    const offers = await Offer.find({ seller_id: req.user.id })
+    // Super-Admin Access: Admins bypass the seller_id filter and see everything
+    const filter = req.user.role === 'admin' ? {} : { seller_id: req.user.id };
+    const offers = await Offer.find(filter)
       .populate('gem_id', 'name image_url base_price')
+      .populate('buyer_id', 'full_name email')
       .sort({ createdAt: -1 });
     res.json(offers);
   } catch (err) {
@@ -66,8 +69,10 @@ exports.getSellerOffers = async (req, res) => {
 // Buyer sees their own offers
 exports.getBuyerOffers = async (req, res) => {
   try {
-    const offers = await Offer.find({ buyer_id: req.user.id })
+    const buyerId = req.user.id || req.user._id;
+    const offers = await Offer.find({ buyer_id: buyerId })
       .populate('gem_id', 'name image_url base_price')
+      .populate('seller_id', 'full_name email')
       .sort({ createdAt: -1 });
     res.json(offers);
   } catch (err) {
@@ -85,8 +90,14 @@ exports.respondToOffer = async (req, res) => {
 
     const offer = await Offer.findById(req.params.id);
     if (!offer) return res.status(404).json({ message: 'Offer find error' });
-    if (offer.seller_id.toString() !== req.user.id)
-      return res.status(403).json({ message: 'Not authorized for this offer' });
+     if (offer.seller_id.toString() !== req.user.id && req.user.role !== 'admin')
+       return res.status(403).json({ message: 'Not authorized for this offer' });
+
+    if (offer.status !== 'Pending') {
+      return res.status(400).json({
+        message: `This offer is already ${offer.status} and cannot be modified.`,
+      });
+    }
 
     offer.status = status;
     const io = req.app.get('io');
@@ -126,12 +137,27 @@ exports.respondToOffer = async (req, res) => {
   }
 };
 
-// Buyer accepts a seller's counter-offer
+// Admin views ALL offers in the system
+exports.getAllOffers = async (req, res) => {
+  try {
+    const offers = await Offer.find()
+      .populate('gem_id', 'name image_url base_price')
+      .populate('buyer_id', 'full_name email')
+      .populate('seller_id', 'full_name email')
+      .sort({ createdAt: -1 });
+    res.json(offers);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Buyer accepts a seller's counter-offer; Admin can accept on behalf of any buyer
 exports.acceptCounter = async (req, res) => {
   try {
     const offer = await Offer.findById(req.params.id);
     if (!offer) return res.status(404).json({ message: 'Offer not found' });
-    if (offer.buyer_id.toString() !== req.user.id)
+    // Super-Admin Access: Admins can accept any counter-offer
+    if (offer.buyer_id.toString() !== req.user.id && req.user.role !== 'admin')
       return res.status(403).json({ message: 'Not authorized' });
     
     if (offer.status !== 'Countered')
@@ -166,6 +192,111 @@ exports.acceptCounter = async (req, res) => {
     }
 
     res.json({ message: 'Counter-offer accepted', offer });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ✅ BUYER PAYMENT: Process payment for an accepted offer
+exports.processOfferPayment = async (req, res) => {
+  try {
+    const offer = await Offer.findById(req.params.id);
+    if (!offer) return res.status(404).json({ message: 'Offer not found' });
+
+    // ✅ BUYER ONLY: Verify this is the buyer making the payment
+    if (offer.buyer_id.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Only the buyer can process payment' });
+    }
+
+    // ✅ STATUS CHECK: Offer must be 'Accepted' to proceed to payment
+    if (offer.status !== 'Accepted') {
+      return res.status(400).json({ message: 'Offer must be accepted before payment' });
+    }
+
+    // ✅ UPDATE OFFER: Mark as 'Paid'
+    offer.status = 'Paid';
+    await offer.save();
+
+    // ✅ UPDATE GEM: Mark as 'Sold' - Update both status and listing_status
+    const gem = await Gem.findById(offer.gem_id);
+    if (gem) {
+      gem.status = 'Sold';
+      gem.listing_status = 'Sold'; // Prevent gem from appearing in marketplace
+      await gem.save();
+    }
+
+    // ✅ NOTIFY SELLER: About successful payment
+    const createNotification = req.app.get('createNotification');
+    if (createNotification) {
+      await createNotification({
+        recipient: offer.seller_id,
+        sender:    req.user.id,
+        type:      'offer',
+        content:   `Payment received! Your ${offer.gem_name} has been sold for LKR ${offer.offer_amount.toLocaleString()}`,
+        link:      '/seller-dashboard'
+      });
+    }
+
+    res.json({ message: 'Payment processed successfully', offer });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ✅ ADMIN COUNTER OFFER: Send a counter offer to buyer
+exports.sendCounterOffer = async (req, res) => {
+  try {
+    const { counter_price } = req.body;
+    
+    // Validate counter_price
+    if (!counter_price || isNaN(counter_price) || Number(counter_price) <= 0) {
+      return res.status(400).json({ message: 'Valid counter price is required' });
+    }
+
+    const offer = await Offer.findById(req.params.id);
+    if (!offer) return res.status(404).json({ message: 'Offer not found' });
+
+    // Only seller or admin can make counter offers
+    if (offer.seller_id.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized to make counter offer' });
+    }
+
+    // Offer must be pending to make a counter offer
+    if (offer.status !== 'Pending') {
+      return res.status(400).json({ message: 'Can only make counter offers on pending offers' });
+    }
+
+    // Update offer with counter price
+    offer.status = 'Countered';
+    offer.offer_amount = Number(counter_price); // Update the offer amount to the new price
+    await offer.save();
+
+    // Notify buyer of counter offer
+    const createNotification = req.app.get('createNotification');
+    if (createNotification) {
+      await createNotification({
+        recipient: offer.buyer_id,
+        sender:    req.user.id,
+        type:      'offer',
+        content:   `New counter-offer of Rs. ${Number(counter_price).toLocaleString()} for ${offer.gem_name}`,
+        link:      '/buyer-dashboard'
+      });
+    }
+
+    res.json({ message: 'Counter offer sent successfully', offer });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ✅ ADMIN ONLY: Delete an offer permanently
+exports.deleteOffer = async (req, res) => {
+  try {
+    const offer = await Offer.findById(req.params.id);
+    if (!offer) return res.status(404).json({ message: 'Offer not found' });
+
+    await Offer.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Offer deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

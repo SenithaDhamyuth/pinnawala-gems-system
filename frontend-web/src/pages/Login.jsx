@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { loginUser } from "../services/api";
-import { Diamond, Mail, Lock, ArrowRight, ShieldAlert } from "lucide-react";
+import { Diamond, Mail, Lock, ArrowRight, ShieldAlert, Home } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -28,6 +28,7 @@ export default function Login() {
       const data = await loginUser(formData);
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.role);
+      localStorage.setItem("userRole", data.role);
       localStorage.setItem("name", data.name);
       localStorage.setItem("kycStatus", data.kycStatus || "Pending");
       try {
@@ -60,6 +61,11 @@ export default function Login() {
         animate={{ opacity: 1, y: 0 }} 
         className="w-full max-w-md relative z-10"
       >
+        <div className="absolute top-[-40px] left-0">
+          <Link to="/" className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors font-medium text-sm">
+            <Home size={16} /> Back to Home
+          </Link>
+        </div>
         <div className="text-center mb-10">
           <div className="w-16 h-16 bg-blue-600 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30">
             <Diamond size={32} className="text-white" strokeWidth={1.5} />

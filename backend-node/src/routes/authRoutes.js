@@ -24,8 +24,10 @@ const upload = multer({
 });
 
 // Public
-router.post('/register', authController.register);
-router.post('/login',    authController.login);
+router.post('/register',     authController.register);
+router.post('/login',        authController.login);
+router.post('/admin-login',  authController.adminLogin); // Admin-only login — validates role=admin
+
 
 // Authenticated Seller Route
 router.post('/kyc/upload', protect, upload.single('document'), authController.uploadKYC);

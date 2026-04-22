@@ -9,6 +9,20 @@ const adSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  link_url: {
+    type: String,
+    default: ''
+  },
+  position: {
+    type: String,
+    enum: ['Home_Top', 'Home_Bottom', 'Marketplace_Grid', 'Marketplace_Top', 'Sidebar'],
+    default: 'Home_Top'
+  },
+  is_active: {
+    type: Boolean,
+    default: true
+  },
+  // Legacy field for backward compatibility
   target_gem_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Gem'

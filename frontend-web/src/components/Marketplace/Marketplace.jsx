@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { getGemstones, getActiveAds, getSellerDirectory } from '../../services/api';
+import { getGemstones, getActiveAds, getSellerDirectory, getAdsByPosition } from '../../services/api';
 import { 
   Search, SlidersHorizontal, ArrowRight, Filter, X, ChevronDown,
   Diamond, ShieldCheck, Store, Star, Heart, Zap, ArrowLeft, 
@@ -14,6 +14,7 @@ import SkeletonCard from './SkeletonCard';
 import GemCard from './GemCard';
 import FilterPanel from './FilterPanel';
 import AdBanner from './AdBanner';
+import AdvertisementCard from './AdvertisementCard';
 import ShopDirectoryFooter from './ShopDirectoryFooter';
 
 export default function Marketplace() {
@@ -87,6 +88,31 @@ export default function Marketplace() {
     setFilters({ gem_type: '', color: '', listing_type: '', min_price: '', max_price: '', min_carats: '', max_carats: '' });
     setSearch('');
   };
+
+  // Helper function to inject ads into gem grid (after every 4 items)
+  const injectAdsIntoGrid = (gemsArray, adsArray, itemsPerRow = 4) => {
+    if (!adsArray || adsArray.length === 0) return gemsArray;
+    
+    const result = [];
+    let adIndex = 0;
+    
+    gemsArray.forEach((gem, index) => {
+      result.push({ type: 'gem', data: gem });
+      
+      // Insert ad after every N items (accounting for previous ads)
+      if ((index + 1) % itemsPerRow === 0 && adIndex < adsArray.length) {
+        result.push({ type: 'ad', data: adsArray[adIndex % adsArray.length] });
+        adIndex++;
+      }
+    });
+    
+    return result;
+  };
+
+  // Get marketplace grid ads
+  const marketplaceGridAds = useMemo(() => {
+    return ads.filter(ad => ad.position === 'Marketplace_Grid' || ad.position === 'Marketplace_Top');
+  }, [ads]);
 
   // Animation variants
   const sectionVariants = {
@@ -284,9 +310,13 @@ export default function Marketplace() {
                 </div>
                 
                 <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                  {categorizedGems.communityMarketplace.map(gem => (
-                    <GemCard key={gem._id} gem={gem} onClick={setSelected} />
-                  ))}
+                  {injectAdsIntoGrid(categorizedGems.communityMarketplace, marketplaceGridAds, 4).map((item, idx) => 
+                    item.type === 'gem' ? (
+                      <GemCard key={`gem-${item.data._id}`} gem={item.data} onClick={setSelected} />
+                    ) : (
+                      <AdvertisementCard key={`ad-${item.data._id}-${idx}`} ad={item.data} />
+                    )
+                  )}
                 </motion.div>
               </motion.div>
             )}

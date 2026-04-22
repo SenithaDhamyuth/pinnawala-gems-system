@@ -50,8 +50,11 @@ exports.createPayment = async (req, res) => {
       $inc: { walletBalance: totalAmount },
     });
 
-    // Mark gem as Sold
-    await Gem.findByIdAndUpdate(gem._id, { status: 'Sold' });
+    // Mark gem as Sold (update both status and listing_status)
+    await Gem.findByIdAndUpdate(gem._id, { 
+      status: 'Sold',
+      listing_status: 'Sold'
+    });
 
     res.status(201).json({ message: 'Payment successful!', payment });
   } catch (err) {

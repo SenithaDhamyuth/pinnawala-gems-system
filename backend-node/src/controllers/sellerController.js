@@ -112,12 +112,12 @@ exports.updateProfile = async (req, res) => {
     // Handle file uploads
     if (req.files) {
       if (req.files.shopLogo && req.files.shopLogo[0]) {
-        const logoPath = `${req.protocol}://${req.get('host')}/uploads/${req.files.shopLogo[0].filename}`;
+        const logoPath = `uploads/${req.files.shopLogo[0].filename}`;
         updateData.shopLogo = logoPath;
       }
 
       if (req.files.bannerImage && req.files.bannerImage[0]) {
-        const bannerPath = `${req.protocol}://${req.get('host')}/uploads/${req.files.bannerImage[0].filename}`;
+        const bannerPath = `uploads/${req.files.bannerImage[0].filename}`;
         if (!updateData.theme) updateData.theme = {};
         updateData.theme.bannerImage = bannerPath;
       }

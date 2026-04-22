@@ -6,21 +6,12 @@ from PIL import Image
 import io
 import os
 
-# ---------------------------------------------------------
-# NEW: අපි අලුතින් හදපු Database Routes ටික මෙතනින් Import කරගන්නවා
 from routes import router as gem_router 
-# ---------------------------------------------------------
 
-# 1. FastAPI App එක මුලින්ම Initialize කරනවා
-app = FastAPI(title="Pinnawala Gems API") # Title එකක් දැම්මා ලස්සනට පේන්න
+app = FastAPI(title="Pinnawala Gems API")
 
-# ---------------------------------------------------------
-# NEW: Database Endpoints ටික Main App එකට Link කරනවා 
-# (දැන් /api/gemstones/ හරහා Marketplace එක වැඩ කරනවා)
 app.include_router(gem_router, prefix="/api")
-# ---------------------------------------------------------
 
-# 2. React Frontend එකට Backend එකත් එක්ක කතා කරන්න අවසර දීම (CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -29,18 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------
-# පරණ AI Code එක එහෙම්මම තියෙනවා පල්ලෙහායින්
-# ---------------------------------------------------------
-
-# 3. AI Model path - updated for new structure
-MODEL_PATH = os.path.join(os.path.dirname(__file__), '../../ai-engine', 'gem_model.h5')
-LABEL_PATH = os.path.join(os.path.dirname(__file__), '../../ai-engine', 'labels.txt')
+# Updated Paths: Now looks directly inside the current folder
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'gem_model.h5')
+LABEL_PATH = os.path.join(os.path.dirname(__file__), 'labels.txt')
 
 model = None
 class_names = []
 
-# 4. Server එක startup වෙද්දීම Model එක Load කරගැනීම 
 @app.on_event("startup")
 async def load_model():
     global model, class_names
@@ -60,7 +46,6 @@ async def load_model():
     except Exception as e:
         print(f"❌ Failed to load AI model: {e}")
 
-# 5. Image Pre-processing 
 def preprocess_image(image_bytes):
     img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
     img = img.resize((224, 224)) 
@@ -68,7 +53,6 @@ def preprocess_image(image_bytes):
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
 
-# 6. Prediction Endpoint
 @app.post("/api/predict-gem")
 async def predict_gem(file: UploadFile = File(...)):
     if model is None:
@@ -104,9 +88,6 @@ async def predict_gem(file: UploadFile = File(...)):
     except Exception as e:
         return {"error": str(e)}
 
-# ---------------------------------------------------------
-# NEW: Root Endpoint එකක් හැදුවා Server එක වැඩද බලන්න
 @app.get("/")
 async def root():
     return {"message": "Welcome to Pinnawala Gems Backend API. Server is Running!"}
-# ---------------------------------------------------------

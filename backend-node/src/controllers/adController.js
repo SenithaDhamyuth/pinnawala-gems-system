@@ -11,11 +11,11 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB for ads
   fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif/;
+    const allowed = /jpeg|jpg|png|gif|webp/;
     const ok = allowed.test(path.extname(file.originalname).toLowerCase());
-    ok ? cb(null, true) : cb(new Error('Only .jpg, .jpeg, .png, and .gif files are allowed'));
+    ok ? cb(null, true) : cb(new Error('Only .jpg, .jpeg, .png, .gif, and .webp files are allowed'));
   }
 });
 
@@ -25,7 +25,7 @@ exports.upload = upload;
 // --- Helper: build image_url from uploaded file or fallback to body ---
 const resolveImageUrl = (req) => {
   if (req.file) {
-    return `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    return (`uploads/${req.file.filename}`).replace(/\\/g, '/');
   }
   return req.body.image_url || '';
 };
@@ -33,7 +33,18 @@ const resolveImageUrl = (req) => {
 // GET all active ads — public marketplace
 exports.getActiveAds = async (req, res) => {
   try {
-    const ads = await Ad.find({ status: 'Active' }).sort({ createdAt: -1 });
+    const ads = await Ad.find({ is_active: true, status: 'Active' }).sort({ createdAt: -1 });
+    res.json(ads);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// GET ads by position — public marketplace
+exports.getAdsByPosition = async (req, res) => {
+  try {
+    const { position } = req.params;
+    const ads = await Ad.find({ position, is_active: true, status: 'Active' }).sort({ createdAt: -1 });
     res.json(ads);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -59,9 +70,16 @@ exports.createAd = async (req, res) => {
       return res.status(400).json({ message: 'An image file or image_url is required.' });
     }
 
+    if (!req.body.title) {
+      return res.status(400).json({ message: 'Title is required.' });
+    }
+
     const ad = await Ad.create({
       title: req.body.title,
       image_url,
+      link_url: req.body.link_url || '',
+      position: req.body.position || 'Home_Top',
+      is_active: req.body.is_active !== undefined ? req.body.is_active : true,
       target_gem_id: req.body.target_gem_id || null,
       status: req.body.status || 'Active',
     });
@@ -80,11 +98,14 @@ exports.updateAd = async (req, res) => {
 
     const updateData = {
       title:          req.body.title          ?? existing.title,
+      link_url:       req.body.link_url       ?? existing.link_url,
+      position:       req.body.position       ?? existing.position,
+      is_active:      req.body.is_active !== undefined ? req.body.is_active : existing.is_active,
       target_gem_id:  req.body.target_gem_id  ?? existing.target_gem_id,
       status:         req.body.status         ?? existing.status,
       // Only replace image_url if a new file was uploaded or a new URL was sent
       image_url: req.file
-        ? `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`
+        ? (`uploads/${req.file.filename}`).replace(/\\/g, '/')
         : req.body.image_url || existing.image_url,
     };
 

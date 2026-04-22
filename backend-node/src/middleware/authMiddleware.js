@@ -26,6 +26,13 @@ const protect = (req, res, next) => {
   }
 };
 
+const buyerOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== 'buyer') {
+    return res.status(403).json({ message: 'Only buyers can do this' });
+  }
+  next();
+};
+
 const sellerOnly = (req, res, next) => {
   // Teammate ගේ Python code එකේ 'role' කියන key එකම පාවිච්චි කරපු නිසා මෙතන වෙනසක් නෑ.
   if (!req.user || req.user.role !== 'seller') {
@@ -48,4 +55,4 @@ const sellerOrAdminOnly = (req, res, next) => {
   next();
 };
 
-module.exports = { protect, sellerOnly, adminOnly, sellerOrAdminOnly };
+module.exports = { protect, buyerOnly, sellerOnly, adminOnly, sellerOrAdminOnly };

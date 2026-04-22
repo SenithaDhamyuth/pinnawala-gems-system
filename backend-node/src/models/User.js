@@ -19,11 +19,11 @@ const userSchema = new mongoose.Schema({
     enum: ['buyer', 'seller', 'admin'],
     default: 'buyer'
   },
-  kycStatus: {
-    type: String,
-    enum: ['Pending', 'Approved', 'Rejected', 'Banned'],
-    default: 'Pending'
-  },
+   kycStatus: {
+     type: String,
+     enum: ['Pending', 'Approved', 'Rejected', 'Banned'],
+     default: 'Approved'
+   },
   kyc_documents: [{ type: String }], // Array of file paths
   
   // Enhanced Seller Storefront Customization

@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import { getImageUrl } from '../../utils/imageUtil';
 
 export default function AdBanner({ ads, onShopNow }) {
   const [currentAd, setCurrentAd] = useState(0);
@@ -17,15 +18,20 @@ export default function AdBanner({ ads, onShopNow }) {
     <div className="max-w-screen-xl mx-auto px-6 pt-8">
       <div className="relative h-48 md:h-64 lg:h-80 w-full overflow-hidden rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/50">
         <AnimatePresence mode="wait">
-          <motion.div
-            key={ads[currentAd]._id}
-            initial={{ opacity: 0, scale: 1.05 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.6 }}
-            className="absolute inset-0"
-          >
-            <img src={ads[currentAd].image_url} alt={ads[currentAd].title} className="w-full h-full object-cover" />
+           <motion.div
+             key={ads[currentAd]._id}
+             initial={{ opacity: 0, scale: 1.05 }}
+             animate={{ opacity: 1, scale: 1 }}
+             exit={{ opacity: 0, scale: 0.95 }}
+             transition={{ duration: 0.6 }}
+             className="absolute inset-0 cursor-pointer hover:scale-105 transition-transform"
+             onClick={() => {
+               if (ads[currentAd].link_url) {
+                 window.open(ads[currentAd].link_url.startsWith('http') ? ads[currentAd].link_url : '//' + ads[currentAd].link_url, '_blank');
+               }
+             }}
+           >
+            <img src={getImageUrl(ads[currentAd].image_url)} alt={ads[currentAd].title} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-r from-slate-900/60 via-slate-900/20 to-transparent flex flex-col justify-center px-10 md:px-16">
               <motion.span initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}
                 className="text-xs font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Editor's Pick</motion.span>

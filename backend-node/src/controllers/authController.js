@@ -79,7 +79,47 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: "Server error during login.", error: error.message });
   }
 };
-// Get all users — admin only
+
+// Admin Login — dedicated endpoint that validates role = 'admin'
+exports.adminLogin = async (req, res) => {
+  try {
+    const email = req.body.email?.toLowerCase().trim();
+    const { password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: 'No account found with that email.' });
+    }
+
+    // Enforce admin role
+    if (user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin accounts only.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect password.' });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      SECRET_KEY,
+      { expiresIn: '1d', algorithm: 'HS256' }
+    );
+
+    console.log(`[Admin Login] Success for: ${email}`);
+    res.status(200).json({
+      token,
+      // Return both key names so AuthContext & api.js both get a valid token
+      user: { id: user._id, email: user.email, full_name: user.full_name, role: user.role },
+      role: user.role,
+      name: user.full_name,
+    });
+  } catch (error) {
+    console.error('[Admin Login Error]', error.message);
+    res.status(500).json({ message: 'Server error during admin login.', error: error.message });
+  }
+};
 // ADMIN: Update user KYC status
 exports.updateKYCStatus = async (req, res) => {
   try {

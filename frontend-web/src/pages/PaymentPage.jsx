@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CreditCard, Lock, CheckCircle, Diamond, ArrowLeft,
-  ShieldCheck, Zap, ChevronRight
+  ShieldCheck, Zap, ChevronRight, AlertCircle
 } from 'lucide-react';
 import { processPayment } from '../services/api';
 
@@ -22,18 +22,17 @@ export default function PaymentPage() {
   const gem        = state?.gem;
 
   const [card, setCard]       = useState({ number: '', name: '', expiry: '', cvv: '' });
-  const [step, setStep]       = useState('form');  // 'form' | 'processing' | 'success'
+  // Lazy initializer: detect missing gem data on the VERY FIRST render,
+  // before any effects fire, preventing a blank/crashed form render.
+  const [step, setStep]       = useState(() => (!state?.gem?._id) ? 'error' : 'form');
   const [error, setError]     = useState('');
   const [flipped, setFlipped] = useState(false);
 
-  // Guard: if no gem data, bounce back
-  useEffect(() => {
-    if (!gem) navigate('/marketplace');
-  }, [gem, navigate]);
-
-  if (!gem) return null;
+  // Redirect helper used by the error state CTA
+  const handlePaymentError = () => navigate('/marketplace');
 
   const handlePay = async (e) => {
+
     e.preventDefault();
     setError('');
     const digits = card.number.replace(/\s/g, '');
@@ -44,7 +43,11 @@ export default function PaymentPage() {
 
     setStep('processing');
     try {
-      await processPayment({ gem_id: gem._id, offer_id: gem.offer_id, card_last4: digits.slice(-4) });
+      await processPayment({ 
+        gem_id: gem._id, 
+        offer_id: gem.offer_id, 
+        card_last4: digits.slice(-4) 
+      });
       setStep('success');
     } catch (err) {
       setError(err.response?.data?.message || 'Payment failed. Please try again.');
@@ -69,7 +72,28 @@ export default function PaymentPage() {
 
       <AnimatePresence mode="wait">
 
-        {/* ── PROCESSING ── */}
+        {/* ── ERROR STATE (Missing Gem Data) ── */}
+        {step === 'error' && (
+          <motion.div key="error"
+            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+            className="flex flex-col items-center gap-6 text-center max-w-md"
+          >
+            <div className="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center border border-red-500/30">
+              <AlertCircle size={48} className="text-red-400" strokeWidth={1.5} />
+            </div>
+            <h2 className="text-3xl font-black text-white">Payment Unavailable</h2>
+            <p className="text-white/60 font-medium leading-relaxed">
+              We couldn't process your payment. The gem information is missing or invalid. Please return to the marketplace and try again.
+            </p>
+            <motion.button
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              onClick={handlePaymentError}
+              className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-500/25 hover:bg-blue-500 transition-colors flex items-center justify-center gap-2"
+            >
+              Return to Marketplace <ChevronRight size={16} />
+            </motion.button>
+          </motion.div>
+        )}
         {step === 'processing' && (
           <motion.div key="processing"
             initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
@@ -103,7 +127,7 @@ export default function PaymentPage() {
             <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
               className="text-white/60 font-medium leading-relaxed"
             >
-              <span className="text-white font-bold">{gem.name}</span> is now yours!<br />
+              <span className="text-white font-bold">{gem?.name || 'Your gem'}</span> is now yours!<br />
               The seller has been notified. Enjoy your rare gem.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
@@ -111,11 +135,11 @@ export default function PaymentPage() {
             >
               <div className="flex justify-between text-sm">
                 <span className="text-white/60">Gem</span>
-                <span className="text-white font-bold">{gem.name}</span>
+                <span className="text-white font-bold">{gem?.name || 'N/A'}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-white/60">Amount Paid</span>
-                <span className="text-white font-bold">LKR {gem.base_price?.toLocaleString()}</span>
+                <span className="text-white font-bold">LKR {gem?.base_price?.toLocaleString() || 'N/A'}</span>
               </div>
               <div className="flex justify-between text-sm border-t border-white/10 pt-3">
                 <span className="text-white/60">Status</span>
@@ -153,19 +177,19 @@ export default function PaymentPage() {
             <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-5 mb-6">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {gem.image_url
+                  {gem?.image_url
                     ? <img src={gem.image_url} alt={gem.name} className="w-full h-full object-contain mix-blend-luminosity" />
                     : <Diamond size={28} className="text-white/40" />
                   }
                 </div>
                 <div className="flex-1">
                   <p className="text-white/50 text-[10px] font-black uppercase tracking-widest">Purchasing</p>
-                  <h3 className="text-white font-bold text-lg leading-tight">{gem.name}</h3>
-                  <p className="text-white/50 text-xs">{gem.gem_type} · {gem.weight_carats} CT</p>
+                  <h3 className="text-white font-bold text-lg leading-tight">{gem?.name || 'Gem'}</h3>
+                  <p className="text-white/50 text-xs">{gem?.gem_type || 'N/A'} · {gem?.weight_carats || 'N/A'} CT</p>
                 </div>
                 <div className="text-right">
                   <p className="text-white/50 text-[10px] font-black uppercase tracking-widest">Total</p>
-                  <p className="text-white font-black text-xl">LKR {gem.base_price?.toLocaleString()}</p>
+                  <p className="text-white font-black text-xl">LKR {gem?.base_price?.toLocaleString() || '0'}</p>
                 </div>
               </div>
             </div>
@@ -297,7 +321,7 @@ export default function PaymentPage() {
                 className="w-full py-5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl font-black text-base shadow-2xl shadow-blue-500/30 hover:from-blue-500 hover:to-blue-400 transition-all flex items-center justify-center gap-3"
               >
                 <Lock size={16} />
-                Pay LKR {gem.base_price?.toLocaleString()}
+                Pay LKR {gem?.base_price?.toLocaleString() || '0'}
               </motion.button>
             </form>
           </motion.div>

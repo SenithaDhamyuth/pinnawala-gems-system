@@ -134,7 +134,7 @@ exports.getOrCreateDirectAdminChat = async (req, res) => {
             gem_name: 'Admin Support',
           }
         },
-        { new: true }
+                                                                                                                                                                                                     { returnDocument: 'after' }
       );
       
       const responseData = {

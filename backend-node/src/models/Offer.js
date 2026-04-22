@@ -11,7 +11,7 @@ const offerSchema = new mongoose.Schema({
   counter_amount:  { type: Number },
   status:          {
     type: String,
-    enum: ['Pending', 'Accepted', 'Rejected', 'Countered'],
+    enum: ['Pending', 'Accepted', 'Rejected', 'Countered', 'Paid'],
     default: 'Pending'
   },
   message:         { type: String, default: '' },

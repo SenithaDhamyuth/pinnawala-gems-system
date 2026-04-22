@@ -15,6 +15,7 @@ import {
 import { AnimatePresence as AP } from "framer-motion";
 import ChatWindow from "../components/ChatWindow";
 import NotificationBell from "../components/NotificationBell";
+import AppointmentsList from "../components/Visitor/AppointmentsList";
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
@@ -340,7 +341,9 @@ export default function SellerDashboard() {
         {/* Tabs */}
         <div className="flex items-center gap-1 mb-6 bg-white border border-slate-100 rounded-2xl p-1.5 w-fit shadow-sm">
           {[
-            { id: "inventory", label: "My Inventory", icon: Diamond },
+            { id: "inventory", label: "Internal Inventory", icon: Diamond },
+            { id: "customize", label: "Marketplace Listings", icon: Store },
+            { id: "appointments", label: "Manage Appointments", icon: Clock },
             {
               id: "offers",
               label: `Offer Inbox${pendingOffers > 0 ? ` (${pendingOffers})` : ""}`,
@@ -591,30 +594,7 @@ export default function SellerDashboard() {
           </>
         )}
 
-        {/* KYC LOCK OVERLAY */}
-        {kycStatus !== "Approved" && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              className="bg-white max-w-md w-full rounded-[32px] p-10 text-center shadow-2xl">
-              <div className="w-20 h-20 bg-amber-50 rounded-3xl mx-auto flex items-center justify-center mb-6 border border-amber-100">
-                <ShieldCheck size={40} className="text-amber-500" strokeWidth={1.5} />
-              </div>
-              <h2 className="text-2xl font-serif font-bold text-slate-900 mb-3">Verification Pending</h2>
-              <p className="text-slate-500 font-medium mb-8 leading-relaxed">
-                Your profile is currently under review by our Admin team.<br />
-                Once verified, you'll be able to manage your inventory and respond to offers.
-              </p>
-              <div className="flex flex-col gap-3">
-                <div className="py-3 px-6 bg-amber-50 rounded-2xl border border-amber-100 text-amber-700 text-sm font-bold flex items-center justify-center gap-2">
-                  <Clock size={16} /> Current Status: {kycStatus}
-                </div>
-                <button onClick={() => navigate("/")} className="text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors">
-                  Go Back
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+
 
         {/* ── OFFER INBOX TAB ── */}
         {activeTab === "offers" && (
@@ -718,6 +698,13 @@ export default function SellerDashboard() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "appointments" && (
+          <div>
+            <h2 className="text-2xl font-serif font-bold text-slate-900 mb-5">Manage Appointments</h2>
+            <AppointmentsList role="seller" />
           </div>
         )}
       </div>

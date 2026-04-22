@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
-import { registerUser  } from "../services/api";
-import { Diamond, Mail, Lock, User, ArrowRight, UserCheck } from "lucide-react";
+import { Diamond, Mail, Lock, User, ArrowRight, Home } from "lucide-react";
+import axios from "axios";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -32,8 +32,25 @@ export default function Register() {
     setLoading(true);
 
     try {
-      await registerUser (formData);
-      navigate("/login", { state: { message: "Account created! Please log in." } });
+      const { data } = await axios.post("http://localhost:5001/api/auth/register", formData);
+      
+      if(data.token) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("role", data.role);
+        localStorage.setItem("userRole", data.role);
+        localStorage.setItem("name", data.name);
+        try {
+          const decoded = JSON.parse(atob(data.token.split('.')[1]));
+          localStorage.setItem("userId", decoded.id);
+        } catch(e) {}
+        
+        toast.success("Account created successfully!");
+        if (data.role === "admin") navigate("/admin");
+        else if (data.role === "seller") navigate("/seller");
+        else navigate("/buyer");
+      } else {
+        navigate("/login", { state: { message: "Account created! Please log in." } });
+      }
     } catch (err) {
       console.error("[Register Error]", err.response?.data || err.message || err);
       const backendMsg = err.response?.data?.message || "";
@@ -62,6 +79,11 @@ export default function Register() {
         animate={{ opacity: 1, y: 0 }} 
         className="w-full max-w-md relative z-10"
       >
+        <div className="absolute top-[-40px] left-0">
+          <Link to="/" className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors font-medium text-sm">
+            <Home size={16} /> Back to Home
+          </Link>
+        </div>
         <div className="text-center mb-10">
           <div className="w-16 h-16 bg-blue-600 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30">
             <Diamond size={32} className="text-white" strokeWidth={1.5} />

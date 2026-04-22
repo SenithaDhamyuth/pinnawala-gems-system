@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 import io from 'socket.io-client';
 import { 
   MessageSquare, 
@@ -95,7 +96,17 @@ export default function MessagesPage() {
 
   const isVerifiedSeller = currentUserRole === 'seller' && !!token;
 
-  // ── 1. API DATA FETCHING ──
+  // ── 0. AUTO-OPEN ROOM FROM NAVIGATION STATE (Chat with Seller button) ──────
+  const { state: navState } = useLocation();
+  useEffect(() => {
+    if (navState?.gemId && navState?.sellerId && currentUserId) {
+      // room_id format: gemId_buyerId_sellerId
+      const roomId = `${navState.gemId}_${currentUserId}_${navState.sellerId}`;
+      setActiveRoomId(roomId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navState?.gemId, navState?.sellerId, currentUserId]);
+
   const fetchRooms = useCallback(async () => {
     if (!token) return;
     try {
@@ -708,14 +719,15 @@ export default function MessagesPage() {
 
   if (pageError) {
     return (
-      <div className="h-screen bg-slate-50 flex items-center justify-center">
+      <div className="h-[calc(100vh-6rem)] bg-slate-50 flex items-center justify-center">
         <p className="text-red-500 font-bold">{pageError}</p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-slate-50 flex overflow-hidden font-sans text-slate-800">
+    <div className="h-[calc(100vh-6rem)] bg-slate-50 flex overflow-hidden font-sans text-slate-800">
+
       
       <style>{`
         .toast-container, .Toastify__toast-container, div[data-hot-toast="true"] {

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getActiveAds,
+  getAdsByPosition,
   getAllAds,
   createAd,
   updateAd,
@@ -10,10 +11,13 @@ const {
 } = require('../controllers/adController');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
-// Public — marketplace banner carousel
+// Public — all active ads for marketplace
 router.get('/', getActiveAds);
 
-// Admin — all ads including Expired ones
+// Public — ads by position (e.g., /api/ads/position/Home_Top)
+router.get('/position/:position', getAdsByPosition);
+
+// Admin — all ads including inactive ones
 router.get('/admin/all', protect, adminOnly, getAllAds);
 
 // Admin — create ad (accepts multipart/form-data with optional 'image' field)

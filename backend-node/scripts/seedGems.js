@@ -4,7 +4,7 @@ const Gem = require('./models/Gem');
 const User = require('./models/User');
 require('dotenv').config();
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/PinnawalaGems';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/PinnawalaGems';
 
 const seedDB = async () => {
   try {

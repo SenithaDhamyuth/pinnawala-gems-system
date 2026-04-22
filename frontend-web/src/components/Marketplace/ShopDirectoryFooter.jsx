@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getImageUrl } from '../../utils/imageUtil';
 
 export default function ShopDirectoryFooter({ sellers }) {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ export default function ShopDirectoryFooter({ sellers }) {
             >
               <div className="w-16 h-16 bg-white rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-sm border border-slate-50 overflow-hidden group-hover:shadow-lg transition-all">
                 {seller.shopLogo ? (
-                  <img src={seller.shopLogo} className="w-full h-full object-cover" alt="Shop Logo" />
+                  <img src={getImageUrl(seller.shopLogo)} className="w-full h-full object-cover" alt="Shop Logo" />
                 ) : (
                   <Building2 className="text-slate-300" size={24} />
                 )}

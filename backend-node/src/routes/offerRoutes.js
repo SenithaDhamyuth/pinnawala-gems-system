@@ -1,14 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const {
-  createOffer, getSellerOffers, getBuyerOffers, respondToOffer, acceptCounter
+  createOffer, getSellerOffers, getBuyerOffers, respondToOffer, acceptCounter, getAllOffers, processOfferPayment, deleteOffer, sendCounterOffer
 } = require('../controllers/offerController');
-const { protect, sellerOnly } = require('../middleware/authMiddleware');
+const { protect, sellerOnly, adminOnly, sellerOrAdminOnly } = require('../middleware/authMiddleware');
 
-router.post('/',                protect, createOffer);
-router.get('/seller',           protect, getSellerOffers);
-router.get('/buyer',            protect, getBuyerOffers);
-router.patch('/:id/respond',    protect, sellerOnly, respondToOffer);
+router.post('/',                    protect, createOffer);
+router.get('/seller',               protect, sellerOrAdminOnly, getSellerOffers);
+router.get('/buyer',                protect, getBuyerOffers);
+router.get('/my-bids',              protect, getBuyerOffers);
+router.get('/admin/all',            protect, adminOnly, getAllOffers);
+router.patch('/:id/respond',        protect, sellerOrAdminOnly, respondToOffer);
 router.patch('/:id/accept-counter', protect, acceptCounter);
+router.patch('/:id/counter',        protect, sellerOrAdminOnly, sendCounterOffer);
+router.post('/:id/pay',             protect, processOfferPayment);
+router.delete('/:id',               protect, adminOnly, deleteOffer);
 
 module.exports = router;
