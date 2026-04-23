@@ -163,7 +163,15 @@ export default function BookAppointmentView() {
       <div>
         <label className="block text-xs font-bold text-slate-500 mb-2">Date</label>
         <input type="date" value={date} min={today}
-          onChange={e => setDate(e.target.value)}
+          onChange={e => {
+  const selected = e.target.value;
+  if (selected && selected < today) {
+    toast.error("You cannot book an appointment in the past.");
+    setDate(''); // This clears the invalid input
+  } else {
+    setDate(selected);
+  }
+}}
           className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
         />
       </div>
@@ -285,13 +293,30 @@ export default function BookAppointmentView() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-8 text-white shadow-xl">
-        <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl" />
-        <div className="relative">
-          <h2 className="text-2xl font-black tracking-tight">Book an Appointment</h2>
-          <p className="text-sm text-blue-100/90 mt-1">Reserve a private gemstone consultation with our experts.</p>
+     {/* Header */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }} 
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#004AAD] via-[#0077B6] to-[#00B4D8] p-10 text-white shadow-2xl border border-white/10"
+      >
+        {/* Decorative Glass Effect Blobs */}
+        <div className="absolute -top-10 -right-10 w-64 h-64 bg-white/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-blue-400/20 rounded-full blur-2xl" />
+
+        <div className="relative z-10 flex items-center gap-6">
+          {/* Calendar Icon with Glassmorphism */}
+          <div className="hidden sm:flex p-4 bg-white/15 backdrop-blur-md rounded-2xl border border-white/20 shadow-inner">
+            <Calendar size={32} className="text-white" />
+          </div>
+          
+          <div>
+            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">
+              Schedule Your Appointment
+            </h2>
+            <p className="text-blue-50 font-medium mt-1 opacity-90 italic">
+              Experience the finest gemstone evaluations at Pinnawala Gems.
+            </p>
+          </div>
         </div>
       </motion.div>
 

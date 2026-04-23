@@ -76,6 +76,12 @@ exports.bookAppointment = async (req, res) => {
   try {
     const { gemologist_id, purpose, date, time_slot, tc_agreed, reminder_method, subscribe_updates } = req.body;
 
+    // Date validation: Prevent past dates
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (date < todayStr) {
+      return res.status(400).json({ detail: 'Cannot book appointments for past dates.' });
+    }
+
     if (!tc_agreed) {
       return res.status(400).json({ detail: 'You must agree to the Terms and Conditions.' });
     }
