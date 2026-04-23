@@ -16,7 +16,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['buyer', 'seller', 'admin'],
+    enum: ['buyer', 'seller', 'admin', 'gemologist'],
     default: 'buyer'
   },
    kycStatus: {
