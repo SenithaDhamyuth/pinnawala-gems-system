@@ -1,8 +1,6 @@
 const Appointment = require('../models/Appointment');
+const User = require('../models/User');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: strip Mongoose internals from a document
-// ─────────────────────────────────────────────────────────────────────────────
 const formatAppointment = (doc) => {
   const obj = doc.toObject ? doc.toObject() : { ...doc };
   obj.id = obj._id.toString();
@@ -11,231 +9,149 @@ const formatAppointment = (doc) => {
   return obj;
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-// ADMIN — Slot Management
-// ═════════════════════════════════════════════════════════════════════════════
+// All possible 30-min slots from 09:00 to 15:00, excluding lunch (12:30, 13:00)
+const ALL_SLOTS = [
+  '09:00','09:30','10:00','10:30','11:00','11:30',
+  '14:00','14:30','15:00'
+];
 
-/**
- * POST /api/appointments
- * Admin creates a new available slot.
- * Body: { date, time_slot, notes? }
- */
-exports.createSlot = async (req, res) => {
-  try {
-    const { date, time_slot, notes } = req.body;
+const timeToMinutes = (t) => {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+};
 
-    if (!date || !time_slot) {
-      return res.status(400).json({ detail: 'date and time_slot are required' });
-    }
+// Returns blocked slots for a gemologist on a date
+const getBlockedSlots = async (gemologist_id, date) => {
+  const existing = await Appointment.find({
+    gemologist_id,
+    date,
+    status: { $ne: 'Cancelled' },
+  });
 
-    const adminId = req.user.id || req.user._id;
-
-    const slot = new Appointment({
-      admin_id: adminId,
-      buyer_id: null,
-      date,
-      time_slot,
-      notes: notes || '',
-      status: 'Available',
+  const blockedSet = new Set();
+  existing.forEach((appt) => {
+    const start = timeToMinutes(appt.time_slot);
+    // Block 45-min window: 15min before + slot + 15min after
+    [start - 15, start, start + 15, start + 30].forEach((m) => {
+      const h = String(Math.floor(m / 60)).padStart(2, '0');
+      const min = String(m % 60).padStart(2, '0');
+      blockedSet.add(`${h}:${min}`);
     });
+  });
 
-    await slot.save();
-    return res.status(201).json(formatAppointment(slot));
-  } catch (err) {
-    console.error('[createSlot]', err);
-    return res.status(500).json({ detail: 'Failed to create slot' });
-  }
+  return Array.from(blockedSet);
 };
 
-/**
- * GET /api/appointments/admin
- * Admin retrieves ALL slots regardless of status.
- * Optional query: ?status=Available|Booked|Completed|Cancelled
- */
-exports.getAdminAppointments = async (req, res) => {
-  try {
-    const filter = {};
-    if (req.query.status) filter.status = req.query.status;
-
-    const appointments = await Appointment.find(filter)
-      .sort({ date: 1, time_slot: 1 })
-      .populate('buyer_id', 'full_name email');
-
-    return res.json(appointments.map(formatAppointment));
-  } catch (err) {
-    console.error('[getAdminAppointments]', err);
-    return res.status(500).json({ detail: 'Failed to fetch appointments' });
-  }
-};
-
-/**
- * PUT /api/appointments/:id
- * Admin edits a slot's date / time_slot / notes (only when status = Available).
- */
-exports.updateSlot = async (req, res) => {
-  try {
-    const slot = await Appointment.findById(req.params.id);
-    if (!slot) return res.status(404).json({ detail: 'Slot not found' });
-
-    if (slot.status !== 'Available') {
-      return res.status(400).json({ detail: 'Only Available slots can be edited' });
-    }
-
-    const { date, time_slot, notes } = req.body;
-    if (date)       slot.date      = date;
-    if (time_slot)  slot.time_slot = time_slot;
-    if (notes !== undefined) slot.notes = notes;
-
-    await slot.save();
-    return res.json(formatAppointment(slot));
-  } catch (err) {
-    console.error('[updateSlot]', err);
-    return res.status(500).json({ detail: 'Failed to update slot' });
-  }
-};
-
-/**
- * PATCH /api/appointments/:id/status
- * Admin changes the lifecycle status of any slot.
- * Body: { status: 'Available' | 'Booked' | 'Completed' | 'Cancelled' }
- */
-exports.updateSlotStatus = async (req, res) => {
-  try {
-    const VALID = ['Available', 'Booked', 'Completed', 'Cancelled'];
-    const { status } = req.body;
-
-    if (!status || !VALID.includes(status)) {
-      return res.status(400).json({ detail: `status must be one of: ${VALID.join(', ')}` });
-    }
-
-    const slot = await Appointment.findById(req.params.id);
-    if (!slot) return res.status(404).json({ detail: 'Slot not found' });
-
-    slot.status = status;
-    // If admin marks as Available again, clear the buyer
-    if (status === 'Available') slot.buyer_id = null;
-
-    await slot.save();
-    return res.json(formatAppointment(slot));
-  } catch (err) {
-    console.error('[updateSlotStatus]', err);
-    return res.status(500).json({ detail: 'Failed to update status' });
-  }
-};
-
-/**
- * DELETE /api/appointments/:id
- * Admin deletes a slot outright (any status — admin has full authority).
- */
-exports.deleteSlot = async (req, res) => {
-  try {
-    const slot = await Appointment.findById(req.params.id);
-    if (!slot) return res.status(404).json({ detail: 'Slot not found' });
-
-    await slot.deleteOne();
-    return res.json({ message: 'Slot deleted successfully', id: req.params.id });
-  } catch (err) {
-    console.error('[deleteSlot]', err);
-    return res.status(500).json({ detail: 'Failed to delete slot' });
-  }
-};
-
-// ═════════════════════════════════════════════════════════════════════════════
-// PUBLIC / BUYER — Booking
-// ═════════════════════════════════════════════════════════════════════════════
-
-/**
- * GET /api/appointments/available
- * Returns all slots with status = 'Available'.
- * Optional query: ?date=2026-04-20
- */
+// GET /api/appointments/available?gemologist_id=...&date=...
 exports.getAvailableSlots = async (req, res) => {
   try {
-    const filter = { status: 'Available' };
-    if (req.query.date) filter.date = req.query.date;
+    const { gemologist_id, date } = req.query;
+    if (!gemologist_id || !date) {
+      return res.status(400).json({ detail: 'gemologist_id and date are required.' });
+    }
 
-    const slots = await Appointment.find(filter).sort({ date: 1, time_slot: 1 });
-    return res.json(slots.map(formatAppointment));
+    const blocked = await getBlockedSlots(gemologist_id, date);
+    const available = ALL_SLOTS.filter((s) => !blocked.includes(s));
+
+    res.json({ date, gemologist_id, available_slots: available, blocked_slots: blocked });
   } catch (err) {
-    console.error('[getAvailableSlots]', err);
-    return res.status(500).json({ detail: 'Failed to fetch available slots' });
+    res.status(500).json({ detail: err.message });
   }
 };
 
-/**
- * POST /api/appointments/book/:id
- * Buyer books an available slot.
- * Race-condition safe: uses atomic findOneAndUpdate.
- */
+// GET /api/appointments/gemologists — list all users with role 'gemologist'
+exports.getGemologists = async (req, res) => {
+  try {
+    const gemologists = await User.find({ role: 'gemologist' })
+      .select('_id full_name email')
+      .lean();
+    res.json(gemologists.map((g) => ({ id: g._id, full_name: g.full_name, email: g.email })));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+};
+
+// POST /api/appointments/book
 exports.bookAppointment = async (req, res) => {
   try {
-    const buyerId = req.user.id || req.user._id;
+    const { gemologist_id, purpose, date, time_slot, tc_agreed, reminder_method, subscribe_updates } = req.body;
 
-    // Atomic update — only succeeds if the slot is still Available
-    const slot = await Appointment.findOneAndUpdate(
-      { _id: req.params.id, status: 'Available' },
-      { $set: { buyer_id: buyerId, status: 'Booked' } },
+    if (!tc_agreed) {
+      return res.status(400).json({ detail: 'You must agree to the Terms and Conditions.' });
+    }
+    if (!gemologist_id || !purpose || !date || !time_slot) {
+      return res.status(400).json({ detail: 'gemologist_id, purpose, date, and time_slot are required.' });
+    }
+
+    // Race condition protection — re-check availability
+    const blocked = await getBlockedSlots(gemologist_id, date);
+    if (blocked.includes(time_slot)) {
+      return res.status(409).json({ detail: 'This slot just became unavailable. Please choose another.' });
+    }
+
+    const appt = await Appointment.create({
+      user_id: req.user.id,
+      gemologist_id,
+      purpose,
+      date,
+      time_slot,
+      status: 'Pending',
+      tc_agreed: true,
+      tc_agreed_timestamp: new Date(),
+      reminder_method: reminder_method || 'Email',
+      subscribe_updates: !!subscribe_updates,
+    });
+
+    res.status(201).json(formatAppointment(appt));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+};
+
+// GET /api/appointments — admin sees all, user sees own
+exports.getAppointments = async (req, res) => {
+  try {
+    const isAdmin = req.user.role === 'admin';
+    const query = isAdmin ? {} : { user_id: req.user.id };
+    const appts = await Appointment.find(query)
+      .populate('gemologist_id', 'full_name email')
+      .populate('user_id', 'full_name email')
+      .sort({ date: 1 });
+    res.json(appts.map(formatAppointment));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+};
+
+// PATCH /api/appointments/:id — admin updates status
+exports.updateAppointmentStatus = async (req, res) => {
+  try {
+    const { status } = req.query;
+    if (!status) return res.status(400).json({ detail: 'status query param is required.' });
+
+    const appt = await Appointment.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status } },
       { new: true }
     );
-
-    if (!slot) {
-      return res.status(409).json({
-        detail: 'This slot is no longer available. Please choose another.',
-      });
-    }
-
-    return res.json(formatAppointment(slot));
+    if (!appt) return res.status(404).json({ detail: 'Appointment not found.' });
+    res.json(formatAppointment(appt));
   } catch (err) {
-    console.error('[bookAppointment]', err);
-    return res.status(500).json({ detail: 'Booking failed' });
+    res.status(500).json({ detail: err.message });
   }
 };
 
-/**
- * GET /api/appointments/my
- * Buyer retrieves their own bookings.
- */
-exports.getBuyerAppointments = async (req, res) => {
+// PATCH /api/appointments/:id/cancel — user cancels own appointment
+exports.cancelAppointment = async (req, res) => {
   try {
-    const buyerId = req.user.id || req.user._id;
+    const appt = await Appointment.findOne({ _id: req.params.id, user_id: req.user.id });
+    if (!appt) return res.status(404).json({ detail: 'Appointment not found.' });
+    if (appt.status === 'Cancelled') return res.status(400).json({ detail: 'Already cancelled.' });
 
-    const appointments = await Appointment.find({ buyer_id: buyerId })
-      .sort({ date: 1, time_slot: 1 });
-
-    return res.json(appointments.map(formatAppointment));
+    appt.status = 'Cancelled';
+    await appt.save();
+    res.json(formatAppointment(appt));
   } catch (err) {
-    console.error('[getBuyerAppointments]', err);
-    return res.status(500).json({ detail: 'Failed to fetch appointments' });
-  }
-};
-
-/**
- * PATCH /api/appointments/:id/cancel
- * Buyer cancels their own booked appointment.
- * Slot is reverted to 'Available' so others can book.
- */
-exports.cancelBuyerAppointment = async (req, res) => {
-  try {
-    const buyerId = (req.user.id || req.user._id).toString();
-
-    const slot = await Appointment.findById(req.params.id);
-    if (!slot) return res.status(404).json({ detail: 'Appointment not found' });
-
-    if (!slot.buyer_id || slot.buyer_id.toString() !== buyerId) {
-      return res.status(403).json({ detail: 'You can only cancel your own appointments' });
-    }
-
-    if (slot.status !== 'Booked') {
-      return res.status(400).json({ detail: 'Only Booked appointments can be cancelled by the buyer' });
-    }
-
-    slot.status    = 'Cancelled';
-    slot.buyer_id  = null;
-    await slot.save();
-
-    return res.json(formatAppointment(slot));
-  } catch (err) {
-    console.error('[cancelBuyerAppointment]', err);
-    return res.status(500).json({ detail: 'Failed to cancel appointment' });
+    res.status(500).json({ detail: err.message });
   }
 };

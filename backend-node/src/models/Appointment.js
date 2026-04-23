@@ -1,49 +1,55 @@
 const mongoose = require('mongoose');
 
-/**
- * Appointment / Slot Schema
- *
- * Lifecycle:
- *   Admin creates  → status: 'Available' (buyer_id = null)
- *   Buyer books    → status: 'Booked'    (buyer_id set)
- *   Admin closes   → status: 'Completed' | 'Cancelled'
- *   Buyer cancels  → status: 'Available' (buyer_id = null restored)
- */
 const appointmentSchema = new mongoose.Schema({
-  // The admin who created / owns this slot
-  admin_id: {
+  user_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
   },
-
-  // The buyer who booked the slot (null when still available)
-  buyer_id: {
+  gemologist_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    default: null,
+    required: true,
   },
-
-  // ISO date string  e.g. "2026-04-20"
-  date: { type: String, required: true },
-
-  // Human-readable label  e.g. "09:00 - 09:30"
-  time_slot: { type: String, required: true },
-
-  // Slot lifecycle status
+  purpose: {
+    type: String,
+    enum: ['Jewelry collections', 'Rare gemstone collections', 'Other / Need assistance'],
+    required: true,
+  },
+  date: {
+    type: String,
+    required: true,
+  },
+  time_slot: {
+    type: String,
+    required: true,
+  },
   status: {
     type: String,
-    enum: ['Available', 'Booked', 'Completed', 'Cancelled'],
-    default: 'Available',
+    enum: ['Pending', 'Confirmed', 'Completed', 'Cancelled'],
+    default: 'Pending',
   },
-
-  // Optional note admin can attach to a slot
-  notes: { type: String, default: '' },
-
+  tc_agreed: {
+    type: Boolean,
+    required: true,
+  },
+  tc_agreed_timestamp: {
+    type: Date,
+  },
+  reminder_method: {
+    type: String,
+    enum: ['Email', 'SMS', 'Both'],
+    default: 'Email',
+  },
+  subscribe_updates: {
+    type: Boolean,
+    default: false,
+  },
+  reminder_24h_sent: { type: Boolean, default: false },
+  reminder_1h_sent:  { type: Boolean, default: false },
   created_at: { type: Date, default: Date.now },
 });
 
-// Compound index so queries on (date, status) are fast
-appointmentSchema.index({ date: 1, status: 1 });
+appointmentSchema.index({ gemologist_id: 1, date: 1, status: 1 });
 
 module.exports = mongoose.model('Appointment', appointmentSchema);
