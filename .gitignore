@@ -1,29 +1,145 @@
 
-ai_engine/dataset/
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+config.json
+secrets.json
+*.key
+*.pem
 
+# Node.js
+node_modules/
+npm-debug.log
+npm-error.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+.npm
+.eslintcache
 
-dataset/
-
-*.checkpoints/
-temp_models/
-
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 venv/
 env/
 .venv/
+ENV/
+env.bak/
+venv.bak/
 
-.env
+# Virtual Environments
+virtualenv/
+.virtualenv
+pipenv/
 
-node_modules/
-npm-debug.log
-yarn-error.log
-
-android/app/build/
-ios/build/
-.expo/
-
-.DS_Store
+# IDE & Editor
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.PROJECT
+.classpath
+.c9/
+*.sublime-project
+*.sublime-workspace
+*.iml
+.vs/
+
+# Build & Runtime
+dist/
+build/
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# OS Specific
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+*.lnk
+$RECYCLE.BIN/
+
+# Uploads & User Data
+uploads/
+kyc_uploads/
+user_uploads/
+temp/
+tmp/
+cache/
+
+# ML/AI Models (if too large)
+*.h5
+*.pkl
+*.pth
+*.pt
+*.onnx
+models/checkpoints/
+checkpoint*/
+temp_models/
+dataset/
+*.zip
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+*.dbf
+database.db
+
+# Testing
+coverage/
+.nyc_output/
+.coverage
+htmlcov/
+
+# Docker
+.dockerignore
+
+# Credentials & Private Data
+.credentials/
+credentials.json
+service-account-key.json
+private/
+secrets/
+keys/
+
+# Git
+.git/
+.gitmodules
+
+# Lock files (use package.json instead)
+Pipfile.lock
+poetry.lock
+
+# Temp Files
+*.tmp
+*.temp
+.tmp/
+temp_*
