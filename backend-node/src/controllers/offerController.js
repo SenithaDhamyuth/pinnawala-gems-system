@@ -8,7 +8,9 @@ exports.createOffer = async (req, res) => {
 
     const gem = await Gem.findById(gem_id);
     if (!gem) return res.status(404).json({ message: 'Gem not found' });
-    if (gem.status !== 'Active') return res.status(400).json({ message: 'Gem is not active' });
+    if (gem.status !== 'Active' && gem.listing_status !== 'Marketplace_Active') {
+      return res.status(400).json({ message: 'Gem is not active for offers' });
+    }
 
     // SECURITY: Prevent Self-Offers
     if (gem.seller_id.toString() === req.user.id) {
@@ -102,8 +104,8 @@ exports.respondToOffer = async (req, res) => {
     offer.status = status;
     const io = req.app.get('io');
 
-    if (status === 'Countered' && counter_amount) {
-      offer.counter_amount = Number(counter_amount);
+    if (status === 'Countered') {
+      offer.counter_amount = Number(req.body.counter_amount);
       // Notify buyer of counter
       const createNotification = req.app.get('createNotification');
       if (createNotification) {
@@ -111,7 +113,7 @@ exports.respondToOffer = async (req, res) => {
           recipient: offer.buyer_id,
           sender:    req.user.id,
           type:      'offer',
-          content:   `New counter-offer of Rs. ${counter_amount.toLocaleString()} for ${offer.gem_name}`,
+          content:   `New counter-offer of Rs. ${offer.counter_amount.toLocaleString()} for ${offer.gem_name}`,
           link:      '/buyer-dashboard'
         });
       }
@@ -198,13 +200,13 @@ exports.acceptCounter = async (req, res) => {
 };
 
 // ✅ BUYER PAYMENT: Process payment for an accepted offer
-exports.processOfferPayment = async (req, res) => {
+exports.processPayment = async (req, res) => {
   try {
     const offer = await Offer.findById(req.params.id);
     if (!offer) return res.status(404).json({ message: 'Offer not found' });
 
     // ✅ BUYER ONLY: Verify this is the buyer making the payment
-    if (offer.buyer_id.toString() !== req.user.id) {
+    if (offer.buyer_id.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Only the buyer can process payment' });
     }
 

@@ -1,33 +1,7 @@
 const User = require('../models/User');
-const multer = require('multer');
-const path = require('path');
+const { uploadProfile } = require('../middleware/uploadMiddleware');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `shop-${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
-  }
-});
-
-const upload = multer({ 
-  storage,
-  limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif/;
-    const ok = allowed.test(path.extname(file.originalname).toLowerCase());
-    if (ok) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only .jpg, .jpeg, .png, and .gif files are allowed'), false);
-    }
-  }
-});
+const upload = uploadProfile;
 
 exports.updateProfile = async (req, res) => {
   try {
@@ -112,14 +86,12 @@ exports.updateProfile = async (req, res) => {
     // Handle file uploads
     if (req.files) {
       if (req.files.shopLogo && req.files.shopLogo[0]) {
-        const logoPath = `uploads/${req.files.shopLogo[0].filename}`;
-        updateData.shopLogo = logoPath;
+        updateData.shopLogo = req.files.shopLogo[0].path;
       }
 
       if (req.files.bannerImage && req.files.bannerImage[0]) {
-        const bannerPath = `uploads/${req.files.bannerImage[0].filename}`;
         if (!updateData.theme) updateData.theme = {};
-        updateData.theme.bannerImage = bannerPath;
+        updateData.theme.bannerImage = req.files.bannerImage[0].path;
       }
     }
 

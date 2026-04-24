@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { getBuyerOffers, acceptCounter, respondToOffer } from '../../services/api';
-import { Diamond, ArrowRight, Loader2, AlertCircle, CheckCircle, XCircle, Repeat2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { getBuyerOffers, acceptCounter, respondToOffer, processOfferPayment } from '../../services/api';
+// CreditCard icon එක අලුතින් add කරා
+import { Diamond, ArrowRight, Loader2, AlertCircle, CheckCircle, XCircle, Repeat2, CreditCard } from 'lucide-react'; 
 import toast from 'react-hot-toast';
 
 const statusConfig = {
@@ -12,9 +14,10 @@ const statusConfig = {
 };
 
 export default function MyOffers() {
+  const navigate = useNavigate();
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(null); // offerId
+  const [actionLoading, setActionLoading] = useState(null);
 
   useEffect(() => {
     fetchOffers();
@@ -56,6 +59,25 @@ export default function MyOffers() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  // අලුතින් හදපු Payment Click Function එක
+  const handlePayNow = (offer) => {
+    const amountToPay = offer.counter_amount || offer.offer_amount;
+    
+    // Construct a localized gem object that the existing PaymentPage can process.
+    // PaymentPage explicitly queries gem.base_price for the total UI transaction amount.
+    const paymentGem = {
+      _id: offer.gem_id?._id || offer.gem_id, 
+      offer_id: offer._id,
+      name: offer.gem_name,
+      image_url: offer.gem_id?.image_url || offer.gem_image_url || '',
+      gem_type: offer.gem_id?.gem_type || 'Gem', 
+      weight_carats: offer.gem_id?.weight_carats || 'N/A', 
+      base_price: amountToPay
+    };
+    
+    navigate('/payment', { state: { gem: paymentGem } });
   };
 
   return (
@@ -106,14 +128,16 @@ export default function MyOffers() {
                         </span>
                       </td>
                       <td className="px-4 py-4 font-bold text-emerald-700">
-                        {offer.status === 'Countered' && offer.counter_amount ? (
-                          <>LKR {offer.counter_amount?.toLocaleString()}</>
+                        {offer.status === 'Countered' ? (
+                          <>LKR {offer.counter_amount?.toLocaleString() || 'N/A'}</>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
                       </td>
                       <td className="px-4 py-4">
-                        {offer.status === 'Countered' && offer.counter_amount && (
+                        
+                        {/* 1. Counter Offers ආවම පෙන්නන Buttons */}
+                        {offer.status === 'Countered' && (
                           <div className="flex gap-2">
                             <button
                               onClick={() => handleAcceptCounter(offer._id)}
@@ -131,6 +155,17 @@ export default function MyOffers() {
                             </button>
                           </div>
                         )}
+
+                        {/* 2. මගහැරිලා තිබ්බ Pay Now Button එක මෙන්න! */}
+                        {offer.status === 'Accepted' && (
+                          <button
+                            onClick={() => handlePayNow(offer)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white font-bold text-sm hover:bg-green-500 shadow-md transition-all hover:-translate-y-0.5"
+                          >
+                            <CreditCard size={16} /> Pay Now
+                          </button>
+                        )}
+
                       </td>
                     </tr>
                   );

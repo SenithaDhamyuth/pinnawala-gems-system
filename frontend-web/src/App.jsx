@@ -20,6 +20,8 @@ import MyOffers from './components/Marketplace/MyOffers.jsx';
 import ReceivedOffers from './components/Marketplace/ReceivedOffers.jsx';
 import PaymentPage from './pages/PaymentPage.jsx';
 import MessagesPage from './pages/MessagesPage.jsx';
+import ShopSettings from './components/Inventory/ShopSettings.jsx';
+import ShopView from './pages/ShopView.jsx';
 
 const MainLayout = () => (
   <>
@@ -127,6 +129,13 @@ function App() {
               <DashboardLayout role={role}><ReceivedOffers /></DashboardLayout>
             </ProtectedRoute>
           } />
+          <Route path="/dashboard/shop-settings" element={
+            <ProtectedRoute allowedRoles={['seller']}>
+              <DashboardLayout role={role}><ShopSettings /></DashboardLayout>
+            </ProtectedRoute>
+          } />
+          {/* Public seller shop page — accessible without login */}
+          <Route path="/shop/:sellerId" element={<ShopView />} />
         </Route>
 
         <Route path="*" element={<Navigate to={token ? getDashboard() : '/login'} replace />} />

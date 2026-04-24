@@ -1,23 +1,6 @@
 const Gem = require('../models/Gem');
-const multer = require('multer');
-const path = require('path');
-
-// --- Image upload setup ---
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + path.extname(file.originalname))
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 2 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif/;
-    const ok = allowed.test(path.extname(file.originalname).toLowerCase());
-    ok ? cb(null, true) : cb(new Error('Only .jpg, .jpeg, .png, and .gif files are allowed'));
-  }
-});
-exports.upload = upload;
+const { uploadInventory } = require('../middleware/uploadMiddleware');
+exports.upload = uploadInventory;
 
 // CREATE a gem listing (sellers/admin only) — defaults to Active for admin
 exports.createGem = async (req, res) => {
@@ -38,7 +21,7 @@ exports.createGem = async (req, res) => {
     }
 
     const image_url = req.file
-      ? (`uploads/${req.file.filename}`).replace(/\\/g, '/')
+      ? req.file.path
       : req.body.image_url || '';
 
     // Determine if this is internal inventory (no price/image required)
@@ -278,7 +261,7 @@ exports.updateGem = async (req, res) => {
     }
 
     if (req.file) {
-      updateData.image_url = `uploads/${req.file.filename}`;
+      updateData.image_url = req.file.path;
       console.log('[updateGem] Image uploaded:', updateData.image_url);
     }
 
@@ -367,6 +350,21 @@ exports.markGemAsSold = async (req, res) => {
     );
 
     res.json({ message: 'Gem marked as sold', gem: updated });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// READ gems by a specific seller — public shop view (excludes Sold items, only Marketplace_Active)
+exports.getGemsBySeller = async (req, res) => {
+  try {
+    const { sellerId } = req.params;
+    const gems = await Gem.find({
+      seller_id:      sellerId,
+      listing_status: 'Marketplace_Active',
+      status:         { $ne: 'Sold' }
+    }).sort({ createdAt: -1 });
+    res.json(gems);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

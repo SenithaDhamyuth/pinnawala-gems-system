@@ -9,8 +9,13 @@ import { io } from 'socket.io-client';
 import API from '../services/api';
 import { useLocation } from 'react-router-dom';
 import { getImageUrl } from '../utils/imageUtil';
+import toast from 'react-hot-toast';
 
 const SOCKET_URL = 'http://localhost:5001';
+
+// Socket singleton - initialized outside component to prevent React 18 double-mount issues
+// Auth will be set dynamically in useEffect when token is available
+const socket = io(SOCKET_URL, { transports: ['websocket'] });
 
 function parseJwt(token) {
   try { return JSON.parse(atob(token.split('.')[1])); }
@@ -174,12 +179,22 @@ export default function ChatWindow({ gem, onClose, initialMessage }) {
   const [minimized,   setMinimized]   = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOnline,    setIsOnline]    = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSending,   setIsSending]   = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
 
-  const socketRef     = useRef(null);
   const bottomRef     = useRef(null);
   const inputRef      = useRef(null);
   const typingTimeout = useRef(null);
   const isAtBottom    = useRef(true);
+
+  const roomDataRef   = useRef({ roomId, gemId, gemName, gemImage: gem?.image_url, buyerId, sellerId });
+
+  // Update room data ref whenever room details change so socket callbacks always have fresh data 
+  // without needing to be re-registered.
+  useEffect(() => {
+    roomDataRef.current = { roomId, gemId, gemName, gemImage: gem?.image_url, buyerId, sellerId };
+  }, [roomId, gemId, gemName, gem?.image_url, buyerId, sellerId]);
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -194,68 +209,92 @@ export default function ChatWindow({ gem, onClose, initialMessage }) {
     loadHistory();
   }, [roomId]);
 
-  useEffect(() => {
-    if (!token) return;
-    const socket = io(SOCKET_URL, { auth: { token }, transports: ['websocket'] });
-    socketRef.current = socket;
+    // Socket event listeners setup and cleanup - EXACT PATTERN REQUESTED
+    useEffect(() => {
+      if (!token) return;
 
-    socket.on('connect', () => {
-      if (!roomId || !gemId) return;
-      setConnected(true);
-      setIsOnline(true);
-      socket.emit('join_room', {
-        room_id:       roomId,
-        gem_id:        gemId,
-        gem_name:      gemName,
-        gem_image_url: gem?.image_url || null,  // gives admin instant thumbnail context
-        buyer_id:      buyerId,
-        seller_id:     sellerId,
+      // Set auth for socket connection
+      socket.auth = { token };
+      
+      // Connect socket if not already connected
+      if (!socket.connected) {
+        socket.connect();
+      }
+
+      const handleReceive = (data) => {
+        // Add to state ONLY if it doesn't already exist to prevent UI duplicates
+        setMessages((prev) => {
+          if (prev.some(msg => msg._id === data._id)) return prev;
+          return [...prev, data];
+        });
+      };
+      
+      socket.on("receive_message", handleReceive);
+      
+      socket.on('connect', () => {
+        const rd = roomDataRef.current;
+        if (!rd.roomId || !rd.gemId) return;
+        
+        setConnected(true);
+        setIsOnline(true);
+        socket.emit('join_room', {
+          room_id:       rd.roomId,
+          gem_id:        rd.gemId,
+          gem_name:      rd.gemName,
+          gem_image_url: rd.gemImage || null,
+          buyer_id:      rd.buyerId,
+          seller_id:     rd.sellerId,
+        });
       });
-    });
 
-    socket.on('receive_message', (msg) => {
-      setMessages(prev => {
-        if (prev.some(m => m?._id === msg._id || (m.text === msg.text && m.sender_id === msg.sender_id && String(m._id).startsWith('temp')))) {
-           return prev.map(m => (m.text === msg.text && m.sender_id === msg.sender_id && String(m._id).startsWith('temp')) ? msg : m);
+      socket.on('user_typing', ({ sender_id, sender_name }) => {
+        // Decode inside to avoid closure staleness
+        const currentId = parseJwt(localStorage.getItem('token'))?.id;
+        if (sender_id !== currentId) setTypingUser(sender_name || 'Someone');
+      });
+
+      socket.on('user_stop_typing', () => setTypingUser(null));
+      
+      socket.on('messages_read', ({ reader_id }) => {
+        const currentId = parseJwt(localStorage.getItem('token'))?.id;
+        if (reader_id !== currentId) {
+          setMessages(prev => prev.map(m => m.sender_id === currentId ? { ...m, is_read: true } : m));
         }
-        return [...prev, msg];
       });
-      if (minimized || !isAtBottom.current) {
-        setUnreadCount(c => c + 1);
-      }
-    });
 
-    socket.on('user_typing', ({ sender_id, sender_name }) => {
-      if (sender_id !== currentUserId) setTypingUser(sender_name || 'Someone');
-    });
+      socket.on('message_deleted', (deletedId) => {
+        setMessages(prev => prev.filter(m => m._id !== deletedId));
+      });
 
-    socket.on('user_stop_typing', () => setTypingUser(null));
-    socket.on('messages_read', ({ reader_id }) => {
-      if (reader_id !== currentUserId) {
-        setMessages(prev => prev.map(m => m.sender_id === currentUserId ? { ...m, is_read: true } : m));
-      }
-    });
+      socket.on('reaction_updated', (payload) => {
+        const { message_id, reactions } = payload;
+        if (!message_id) return;
+        setMessages(prev => prev.map(m => m._id === message_id ? { ...m, reactions } : m));
+      });
 
-    socket.on('message_deleted', (deletedId) => {
-      setMessages(prev => prev.filter(m => m._id !== deletedId));
-    });
+      socket.on('disconnect', () => { 
+        setConnected(false); 
+        setIsOnline(false); 
+      });
 
-    socket.on('reaction_updated', (payload) => {
-      const { message_id, reactions } = payload;
-      if (!message_id) return;
-      setMessages(prev => prev.map(m => m._id === message_id ? { ...m, reactions } : m));
-    });
+      // Cleanup function to remove listeners (but keep socket connected)
+      return () => {
+        socket.off("receive_message", handleReceive);
+        socket.off('connect');
+        socket.off('user_typing');
+        socket.off('user_stop_typing');
+        socket.off('messages_read');
+        socket.off('message_deleted');
+        socket.off('reaction_updated');
+        socket.off('disconnect');
+      };
+    }, [token]); // Re-setup listeners only if token changes
 
-    socket.on('disconnect', () => { setConnected(false); setIsOnline(false); });
-
-    return () => socket.disconnect();
-  }, [token, roomId]);
-
-  useEffect(() => {
-    if (connected && !minimized && roomId) {
-      socketRef.current?.emit('mark_read', { room_id: roomId });
-    }
-  }, [connected, minimized, messages.length]);
+   useEffect(() => {
+     if (connected && !minimized && roomId) {
+       socket.emit('mark_read', { room_id: roomId });
+     }
+   }, [connected, minimized, messages.length]);
 
   useEffect(() => {
     if (!minimized) {
@@ -264,111 +303,165 @@ export default function ChatWindow({ gem, onClose, initialMessage }) {
     }
   }, [messages, minimized]);
 
-  const handleDeleteMessage = (message_id) => {
-    if (!socketRef.current?.connected || !roomId) return;
-    socketRef.current?.emit('delete_message', { room_id: roomId, message_id });
-  };
-
-  const handleReact = (message_id, emoji) => {
-    if (!socketRef.current?.connected || !roomId) return;
-    socketRef.current?.emit('add_reaction', { room_id: roomId, message_id, emoji });
-  };
-
-  const handleSend = useCallback(() => {
-    const text = input.trim();
-    if (!text || !socketRef.current?.connected || !roomId) return;
-    
-    // Real-Time Message State Update (Frontend) Fix
-    const newMessage = {
-      _id: `temp-${Date.now()}`,
-      room_id: roomId,
-      sender_id: currentUserId,
-      sender_role: currentUserRole,
-      sender_name: 'You',
-      text: text,
-      type: 'text',
-      createdAt: new Date().toISOString()
+    const handleDeleteMessage = (message_id) => {
+      if (!socket.connected || !roomId) return;
+      socket.emit('delete_message', { room_id: roomId, message_id });
     };
-    
-    setMessages(prev => [...prev, newMessage]);
 
-    socketRef.current?.emit('send_message', { room_id: roomId, text });
-    setInput('');
-    clearTimeout(typingTimeout.current);
-    socketRef.current?.emit('stop_typing', { room_id: roomId });
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
-  }, [input, roomId]);
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !socketRef.current?.connected || !roomId) return;
-
-    // ── Step 1: Read DataURL immediately so we can show a preview ──────────
-    const localPreviewUrl = await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => resolve(ev.target.result);
-      reader.readAsDataURL(file);
-    });
-
-    // ── Step 2: Inject optimistic temp message BEFORE upload starts ─────────
-    const tempId = `__temp__${Date.now()}`;
-    const optimisticMsg = {
-      _id:         tempId,
-      room_id:     roomId,
-      sender_id:   currentUserId,
-      sender_role: currentUserRole,
-      sender_name: 'You',
-      text:        localPreviewUrl,   // DataURL so image renders immediately
-      type:        'image',
-      createdAt:   new Date().toISOString(),
-      is_read:     false,
-      reactions:   [],
-      __isOptimistic: true,           // marker so we can swap it out
+    const handleReact = (message_id, emoji) => {
+      if (!socket.connected || !roomId) return;
+      socket.emit('add_reaction', { room_id: roomId, message_id, emoji });
     };
-    setMessages(prev => [...prev, optimisticMsg]);
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
 
-    // ── Step 3: Upload + emit with real URL, then swap out the temp entry ────
-    const formData = new FormData();
-    formData.append('image', file);
-    try {
-      const { data } = await API.post('/chat/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      const realUrl = data?.imageUrl;
+   const handleSend = useCallback(() => {
+     const text = input.trim();
+     if (!text || !socket.connected || !roomId || isSending) return;
+     
+     setIsSending(true);
+     
+     // Real-Time Message State Update (Frontend) Fix
+     const newMessage = {
+       _id: `__temp__${Date.now()}_${Math.random()}`,
+       room_id: roomId,
+       sender_id: currentUserId,
+       sender_role: currentUserRole,
+       sender_name: 'You',
+       text: text,
+       type: 'text',
+       createdAt: new Date().toISOString()
+     };
+     
+     setMessages(prev => [...prev, newMessage]);
+ 
+     socket.emit('send_message', { room_id: roomId, text });
+     setInput('');
+     clearTimeout(typingTimeout.current);
+     socket.emit('stop_typing', { room_id: roomId });
+     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
+ 
+     setTimeout(() => { setIsSending(false); }, 300);
+   }, [input, roomId, currentUserId, currentUserRole, isSending]);
 
-      // Swap the DataURL preview with the real server URL (no flicker)
-      setMessages(prev =>
-        prev.map(m =>
-          m._id === tempId
-            ? { ...m, _id: tempId + '_confirmed', text: realUrl, __isOptimistic: false }
-            : m
-        )
-      );
+    const handleImageUpload = async (e) => {
+      const files = Array.from(e.target.files);
+      if (!files.length || !socket.connected || !roomId || isUploading) return;
 
-      // Tell the server — other participants will receive it via socket
-      socketRef.current?.emit('send_message', { room_id: roomId, text: realUrl, type: 'image' });
+      // Calculate total images if these new ones are added
+      const currentTotal = selectedImages.length;
+      const newFilesTotal = e.target.files.length;
+
+      if (currentTotal + newFilesTotal > 3) {
+        toast.error("You can only attach a maximum of 3 images per message!");
+        e.target.value = "";
+        return;
+      }
+
+      const validFiles = [];
+      const tempMessages = [];
+
+      // Strict 5MB file limit validation entirely before interacting with the DOM
+      for (const file of files) {
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error('File size must be under 5MB!');
+          e.target.value = '';
+          return;
+        }
+        validFiles.push(file);
+      }
+
+      if (validFiles.length === 0) {
+        e.target.value = '';
+        return;
+      }
+
+      // Set uploading state to prevent duplicate submissions
+      setIsUploading(true);
+
+      // ── Step 1 & 2: Local Optimistic Rendering ──────────
+      for (const file of validFiles) {
+        const localPreviewUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => resolve(ev.target.result);
+          reader.readAsDataURL(file);
+        });
+        
+        const optimisticMsg = {
+          _id:         `__temp__${Date.now()}_${Math.random()}`,
+          room_id:     roomId,
+          sender_id:   currentUserId,
+          sender_role: currentUserRole,
+          sender_name: 'You',
+          text:        localPreviewUrl,
+          type:        'image',
+          createdAt:   new Date().toISOString(),
+          is_read:     false,
+          reactions:   [],
+          __isOptimistic: true,
+        };
+        tempMessages.push(optimisticMsg);
+      }
+
+      // Track selected images for current message composition
+      setSelectedImages(prev => [...prev, ...validFiles]);
+      setMessages(prev => [...prev, ...tempMessages]);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
-    } catch (err) {
-      console.error('Image upload failed', err);
-      // Remove the broken optimistic entry on failure
-      setMessages(prev => prev.filter(m => m._id !== tempId));
-    }
-    // Reset the file input so the same file can be re-selected if needed
-    e.target.value = '';
-  };
+
+      // ── Step 3: Bundle & dispatch securely directly towards Cloudinary via node server ────
+      const formData = new FormData();
+      validFiles.forEach(file => formData.append('images', file));
+
+      try {
+        const { data } = await API.post('/chat/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const imageUrls = data?.imageUrls || [];
+
+        // Sequentially map each returned real Cloudinary URL to the optimistic models
+        setMessages(prev => {
+          let newMsgs = [...prev];
+          for(let i = 0; i < tempMessages.length; i++) {
+            if (imageUrls[i]) {
+              newMsgs = newMsgs.map(m => m._id === tempMessages[i]._id ? { ...m, _id: tempMessages[i]._id + '_confirmed', text: imageUrls[i], __isOptimistic: false } : m);
+            }
+          }
+          return newMsgs;
+        });
+
+        // Propagate universally through sockets
+        for (const realUrl of imageUrls) {
+          socket.emit('send_message', { room_id: roomId, text: realUrl, type: 'image' });
+        }
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
+        
+        // Clear selected images after successful upload
+        setSelectedImages([]);
+      } catch (err) {
+        console.error('Image upload failed', err);
+        toast.error('Image upload failed');
+        const tempIds = tempMessages.map(m => m._id);
+        setMessages(prev => prev.filter(m => !tempIds.includes(m._id)));
+        
+        // Clear selected images on failure
+        setSelectedImages([]);
+      } finally {
+        // Reset uploading state
+        setIsUploading(false);
+      }
+      
+      e.target.value = '';
+    };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  const handleInputChange = (e) => {
-    setInput(e.target.value);
-    if (!socketRef.current?.connected || !roomId) return;
-    socketRef.current?.emit('typing', { room_id: roomId });
-    clearTimeout(typingTimeout.current);
-    typingTimeout.current = setTimeout(() => {
-      socketRef.current?.emit('stop_typing', { room_id: roomId });
-    }, 1800);
-  };
+   const handleInputChange = (e) => {
+     setInput(e.target.value);
+     if (!socket.connected || !roomId) return;
+     socket.emit('typing', { room_id: roomId });
+     clearTimeout(typingTimeout.current);
+     typingTimeout.current = setTimeout(() => {
+       socket.emit('stop_typing', { room_id: roomId });
+     }, 1800);
+   };
 
   const toggleMinimize = () => {
     setMinimized(m => !m);
@@ -498,7 +591,7 @@ export default function ChatWindow({ gem, onClose, initialMessage }) {
                 {/* Image Upload Button */}
                 <label className="p-2.5 cursor-pointer text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all flex-shrink-0">
                    <ImageIcon size={20} strokeWidth={2} />
-                   <input type="file" accept="image/*" hidden onChange={handleImageUpload} />
+                   <input type="file" accept="image/*" multiple hidden onChange={handleImageUpload} />
                 </label>
                 
                 {/* Text Area */}
@@ -513,16 +606,20 @@ export default function ChatWindow({ gem, onClose, initialMessage }) {
                   className="flex-1 bg-transparent text-[14px] font-medium text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none py-3 px-1 custom-scrollbar"
                 />
                 
-                {/* Send Button */}
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleSend}
-                  disabled={!input.trim() || !connected}
-                  className="w-10 h-10 flex-shrink-0 bg-slate-900 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-600/20 mb-0.5"
-                >
-                  <Send size={16} strokeWidth={2.5} className="ml-0.5" />
-                </motion.button>
+                 {/* Send Button */}
+                 <motion.button
+                   whileHover={{ scale: 1.05 }}
+                   whileTap={{ scale: 0.95 }}
+                   onClick={handleSend}
+                   disabled={!input.trim() || !connected || isSending || isUploading}
+                   className="w-10 h-10 flex-shrink-0 bg-slate-900 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-600/20 mb-0.5"
+                 >
+                   {isSending || isUploading ? (
+                     <Loader2 size={14} strokeWidth={2} className="ml-0.5 animate-spin" />
+                   ) : (
+                     <Send size={16} strokeWidth={2.5} className="ml-0.5" />
+                   )}
+                 </motion.button>
               </div>
               
               {/* Connection Status Text */}

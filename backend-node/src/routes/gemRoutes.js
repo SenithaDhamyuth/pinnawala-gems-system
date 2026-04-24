@@ -1,19 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const {
-  createGem, 
-  getAllGems, 
+  createGem,
+  getAllGems,
   getInventoryGems,
   getMarketplaceInventoryGems,
-  getAdminGems, 
-  getAdminCompanyGems, 
-  getMyGems, 
+  getAdminGems,
+  getAdminCompanyGems,
+  getMyGems,
+  getGemsBySeller,
   getGemById,
-  updateGem, 
+  updateGem,
   updateGemStatus,
   updateListingStatus,
   markGemAsSold,
-  deleteGem, 
+  deleteGem,
   upload
 } = require('../controllers/gemController');
 const { protect, sellerOnly, adminOnly, sellerOrAdminOnly } = require('../middleware/authMiddleware');
@@ -32,8 +33,9 @@ router.get('/admin/company',       protect, adminOnly, getAdminCompanyGems);
 router.get('/my/listings',         protect, sellerOrAdminOnly, getMyGems);
 
 // ── Public routes ──
-router.get('/',                    getAllGems);
-router.get('/:id',                 getGemById);
+router.get('/',                      getAllGems);
+router.get('/seller/:sellerId',      getGemsBySeller);  // Public: seller shop page
+router.get('/:id',                   getGemById);
 
 // ── Protected routes ──
 router.post('/',                   protect, sellerOrAdminOnly, upload.single('image'), createGem);

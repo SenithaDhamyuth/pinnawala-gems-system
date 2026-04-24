@@ -14,9 +14,6 @@ exports.createPayment = async (req, res) => {
     // Validate gem exists and is Active / Direct_Sale
     const gem = await Gem.findById(gem_id);
     if (!gem)              return res.status(404).json({ message: 'Gem not found.' });
-    if (gem.status !== 'Active')
-                           return res.status(400).json({ message: 'This gem is not available for purchase.' });
-
     let totalAmount  = gem.base_price;
     
     // If checking out via an accepted offer, override the base price safely via backend verified ledger
@@ -25,11 +22,22 @@ exports.createPayment = async (req, res) => {
        if (!offer || offer.status !== 'Accepted' || offer.buyer_id.toString() !== buyerId) {
            return res.status(400).json({ message: 'Failed to verify secure offer acceptance.' });
        }
-       totalAmount = offer.offer_amount;
+       
+       // Ensure the gem isn't completely 'Sold' to someone else already
+       if (gem.status === 'Sold' || gem.listing_status === 'Sold') {
+           return res.status(400).json({ message: 'This gem has already been sold.' });
+       }
+       
+       totalAmount = offer.offer_amount || offer.counter_amount;
        
        // Optionally mark the offer as officially Closed/Paid to avoid double-spends
        offer.status = 'Paid';
        await offer.save();
+    } else {
+       // Regular purchase check: must be active
+       if (gem.status !== 'Active') {
+           return res.status(400).json({ message: 'This gem is not available for purchase.' });
+       }
     }
 
     // Create payment record
