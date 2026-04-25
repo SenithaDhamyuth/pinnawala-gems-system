@@ -25,6 +25,7 @@ const settingRoutes = require('./routes/settingRoutes');
 const appointmentRoutes = require('./routes/appointmentRoutes');
 const learningRoutes = require('./routes/learningRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
+const inquiryRoutes = require('./routes/inquiryRoutes');
 
 const Chat = require('./models/Chat');
 const Offer = require('./models/Offer');
@@ -399,6 +400,7 @@ app.use('/api/settings', settingRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/users', userRoutes);
 
 // ─────────────────────────────────────────────────────────────────────────────
