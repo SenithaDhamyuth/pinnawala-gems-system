@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, Settings, Bell, User, ChevronDown, Calendar, Gavel } from 'lucide-react';
+import { Menu, X, LogOut, Settings, Bell, User, ChevronDown, Calendar, Gavel, MessageSquare, Store } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const DashboardLayout = ({ children, role }) => {
