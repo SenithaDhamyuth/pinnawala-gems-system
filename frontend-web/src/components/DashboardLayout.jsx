@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, Settings, Bell, User, ChevronDown, Calendar, Gavel, Store } from 'lucide-react';
+import { Menu, X, LogOut, Settings, Bell, User, ChevronDown, Calendar, Gavel, MessageSquare, Store } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const DashboardLayout = ({ children, role }) => {
@@ -137,6 +137,15 @@ const DashboardLayout = ({ children, role }) => {
                   >
                     <Calendar size={18} className="text-blue-600" strokeWidth={2.5} />
                     Book Appointment
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate('/dashboard/inquiries')}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-slate-600 hover:bg-slate-50"
+                  >
+                    <MessageSquare size={18} className="text-purple-600" strokeWidth={2.5} />
+                    Help & Support
                   </motion.button>
                 </>
               )}

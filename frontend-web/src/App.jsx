@@ -16,6 +16,7 @@ import DashboardLayout from './components/DashboardLayout.jsx';
 import InventoryDashboard from './components/Inventory/InventoryDashboard.jsx';
 import AuctionsList from './components/Bidding/AuctionsList.jsx';
 import AppointmentsList from './components/Visitor/AppointmentsList.jsx';
+import InquiryList from './components/Inquiry/InquiryList.jsx';
 import MyOffers from './components/Marketplace/MyOffers.jsx';
 import ReceivedOffers from './components/Marketplace/ReceivedOffers.jsx';
 import PaymentPage from './pages/PaymentPage.jsx';
@@ -117,6 +118,11 @@ function App() {
           <Route path="/dashboard/appointments" element={
             <ProtectedRoute allowedRoles={['buyer', 'seller', 'admin']}>
               <DashboardLayout role={role}><AppointmentsList role={role} /></DashboardLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard/inquiries" element={
+            <ProtectedRoute allowedRoles={['buyer', 'seller', 'admin']}>
+              <DashboardLayout role={role}><InquiryList role={role} /></DashboardLayout>
             </ProtectedRoute>
           } />
           <Route path="/dashboard/my-offers" element={

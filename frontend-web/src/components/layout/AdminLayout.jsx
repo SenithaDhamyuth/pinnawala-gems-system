@@ -14,6 +14,7 @@ import MessagesPage from '../../pages/MessagesPage.jsx';
 import BiddingManagementTab from '../Inventory/BiddingManagementTab.jsx';
 import AuctionManagementTab from '../Inventory/AuctionManagementTab.jsx';
 import AdminFeedbackView from '../AdminFeedbackView.jsx';
+import AdminInquiryTab from '../Inquiry/AdminInquiryTab.jsx';
 
 const ADMIN_TABS = [
   { id: 'inventory', label: 'Internal Inventory', icon: Package },
@@ -26,6 +27,7 @@ const ADMIN_TABS = [
   { id: 'messages', label: 'Messages', icon: MessageSquare },
   { id: 'learning', label: 'Learning Hub', icon: BookOpen },
   { id: 'feedback', label: 'System Feedback', icon: MessageSquare },
+  { id: 'inquiries', label: 'Support Tickets', icon: MessageSquare },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -72,6 +74,8 @@ export default function AdminLayout() {
         return <LearningManagementTab />;
       case 'feedback':
         return <AdminFeedbackView />;
+        case 'inquiries':
+  return <AdminInquiryTab />;
       case 'settings':
         return (
           <div className="bg-white border border-blue-100 rounded-2xl p-6">
