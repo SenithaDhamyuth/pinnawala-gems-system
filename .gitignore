@@ -95,9 +95,11 @@ tmp/
 cache/
 
 # ML/AI Models (if too large)
-*.h5
 *.pkl
 *.pth
+
+# Exception: Include the required gem model for production
+!backend/src/gem_model.h5
 *.pt
 *.onnx
 models/checkpoints/

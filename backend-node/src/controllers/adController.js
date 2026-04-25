@@ -1,31 +1,13 @@
 const Ad = require('../models/Ad');
-const multer = require('multer');
-const path = require('path');
-
-// --- Image upload setup (same pattern as gemController) ---
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) =>
-    cb(null, 'ad_' + Date.now() + path.extname(file.originalname))
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB for ads
-  fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif|webp/;
-    const ok = allowed.test(path.extname(file.originalname).toLowerCase());
-    ok ? cb(null, true) : cb(new Error('Only .jpg, .jpeg, .png, .gif, and .webp files are allowed'));
-  }
-});
+const { uploadAd } = require('../middleware/uploadMiddleware');
 
 // Export the multer middleware so adRoutes.js can use it
-exports.upload = upload;
+exports.upload = uploadAd;
 
 // --- Helper: build image_url from uploaded file or fallback to body ---
 const resolveImageUrl = (req) => {
   if (req.file) {
-    return (`uploads/${req.file.filename}`).replace(/\\/g, '/');
+    return req.file.path;
   }
   return req.body.image_url || '';
 };
@@ -105,7 +87,7 @@ exports.updateAd = async (req, res) => {
       status:         req.body.status         ?? existing.status,
       // Only replace image_url if a new file was uploaded or a new URL was sent
       image_url: req.file
-        ? (`uploads/${req.file.filename}`).replace(/\\/g, '/')
+        ? req.file.path
         : req.body.image_url || existing.image_url,
     };
 

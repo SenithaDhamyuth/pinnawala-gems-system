@@ -151,7 +151,7 @@ exports.uploadKYC = async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
     
     // Save the file path to the user's kyc_documents array
-    const filePath = `/uploads/kyc/${req.file.filename}`;
+    const filePath = req.file.path;
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { $push: { kyc_documents: filePath }, kycStatus: 'Pending' },

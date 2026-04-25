@@ -47,6 +47,7 @@ export const deleteAnyGem   = (id)             => API.delete(`/gems/${id}`).then
 // ── Offers — Buyer ────────────────────────────────────────────────────────────
 export const createOffer    = (data)           => API.post("/offers", data).then(r => r.data);
 export const getBuyerOffers = ()               => API.get("/offers/buyer").then(r => r.data);
+export const processOfferPayment = async (offerId) => { return await API.post(`/offers/${offerId}/pay`); };
 
 // ── Offers — Seller ───────────────────────────────────────────────────────────
 export const getSellerOffers= ()               => API.get("/offers/seller").then(r => r.data);

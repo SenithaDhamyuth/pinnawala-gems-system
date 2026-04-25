@@ -15,31 +15,17 @@ const {
 } = require('../controllers/Chatcontroller');
 const { protect } = require('../middleware/authMiddleware');
 
-// ── Multer Storage For Chat Images ──
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename:    (req, file, cb) => cb(null, `chat_${Date.now()}_${Math.round(Math.random()*1E5)}${path.extname(file.originalname)}`)
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
-  fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif/;
-    const ok = allowed.test(path.extname(file.originalname).toLowerCase());
-    ok ? cb(null, true) : cb(new Error('Only .jpg, .jpeg, .png, and .gif files are allowed'));
-  }
-});
+const { uploadChat } = require('../middleware/uploadMiddleware');
 
 // POST /api/chat/upload
-router.post('/upload', protect, upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  const imageUrl = `http://localhost:5001/uploads/${req.file.filename}`;
-  res.json({ imageUrl });
+router.post('/upload', protect, uploadChat.array('images', 3), (req, res) => {
+  if (!req.files || req.files.length === 0) return res.status(400).json({ message: 'No images uploaded' });
+  const imageUrls = req.files.map(file => file.path);
+  res.json({ imageUrls });
 });
-router.post('/upload-image', protect, upload.single('image'), (req, res) => {
+router.post('/upload-image', protect, uploadChat.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  const imageUrl = `http://localhost:5001/uploads/${req.file.filename}`;
-  res.json({ imageUrl });
+  res.json({ imageUrl: req.file.path });
 });
 
 // Load message history for a specific room (buyer opens chat window → fetch old messages)
